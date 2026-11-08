@@ -1,6 +1,7 @@
 """The claudeMon terminal UI: a sidebar of live mini-graphs and ten pages."""
 
 import curses
+import locale
 import os
 import sys
 import textwrap
@@ -1547,6 +1548,10 @@ class App:
 
 
 def run(theme=None, interval=None, start=None):
+    try:
+        locale.setlocale(locale.LC_ALL, "")      # curses needs this to draw UTF-8 (blocks, box lines)
+    except locale.Error:
+        pass
     cfg = config.load()
     if theme:
         cfg["theme"] = theme

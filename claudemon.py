@@ -45,7 +45,10 @@ def cmd_snapshot(args):
     store = Store()
     store._index()
     store.refresh()
-    for s in store.live_sessions():
+    live = store.live_sessions()
+    if not live:
+        print("No live Claude Code sessions.")
+    for s in live:
         used, size = s.context()
         t = s.t.totals()
         print("%-24s %-10s %-10s %-7s ctx %-5s out %-7s agents %d  loops %d" % (
@@ -55,6 +58,8 @@ def cmd_snapshot(args):
         f = store.limits.forecast(key, store.tokens_between)
         if f.pct is not None:
             print("%s limit %.0f%%  %s" % (label, f.pct, f.note))
+    if not store.limits.forecast("five_hour", store.tokens_between).pct and not install.installed():
+        print("Limits are empty: run `claudemon install` to add the tap.")
 
 
 def main(argv=None):

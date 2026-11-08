@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from paths import stable_python
+
 ROOT = Path(__file__).resolve().parent
 
 
@@ -14,11 +16,17 @@ def _command(extra, env=None):
     args = " ".join(shlex.quote(a) for a in extra)
     prefix = ("env " + "".join("%s=%s " % (k, shlex.quote(v)) for k, v in env.items())) if env else ""
     return "printf '\\033]0;claudeMon\\007'; cd %s && exec %s%s %s %s" % (
-        shlex.quote(str(ROOT)), prefix, shlex.quote(sys.executable), shlex.quote(str(ROOT / "claudemon.py")), args)
+        shlex.quote(str(ROOT)), prefix, shlex.quote(stable_python()), shlex.quote(str(ROOT / "claudemon.py")), args)
 
 
 def _osa(script):
-    subprocess.run(["osascript", "-e", script], check=True, stdout=subprocess.DEVNULL)
+    run = subprocess.run(["osascript", "-e", script], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if run.returncode:
+        err = run.stderr.strip()
+        hint = ""
+        if "-1743" in err or "not allowed" in err.lower():
+            hint = " (allow your terminal to control Terminal/iTerm in System Settings > Privacy & Security > Automation, or just run claudemon directly)"
+        sys.exit("could not open a window: %s%s" % (err.splitlines()[-1] if err else "osascript failed", hint))
 
 
 def _as_str(s):

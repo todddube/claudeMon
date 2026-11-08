@@ -8,12 +8,12 @@ restores it exactly. Hook entries are tagged with MARK so only ours are removed.
 import json
 import re
 import shlex
+import os
 import shutil
-import sys
 import time
 from pathlib import Path
 
-from paths import SETTINGS_FILE, STATE_DIR, TAP_BACKUP
+from paths import SETTINGS_FILE, STATE_DIR, TAP_BACKUP, stable_python
 
 TAP = Path(__file__).resolve().parent / "tap.py"
 MARK = "# claudemon"
@@ -39,7 +39,7 @@ def _save(settings):
 
 
 def _python():
-    return shlex.quote(sys.executable or "python3")
+    return shlex.quote(stable_python())
 
 
 def _hook_command():
@@ -62,6 +62,23 @@ def installed():
     return st["statusline"] and st["hook"]
 
 
+def _gone(cmd):
+    """True when the interpreter at the start of an installed tap command no longer exists."""
+    try:
+        exe = shlex.split(cmd)[0]
+    except (ValueError, IndexError):
+        return False
+    return os.path.isabs(exe) and not os.path.exists(exe)
+
+
+def _repoint(cmd, verb):
+    """Swap in this checkout's tap.py and (if the old one vanished) a working interpreter."""
+    cmd = re.sub(r"\S*tap\.py(?= %s)" % verb, lambda m: shlex.quote(str(TAP)), cmd, count=1)
+    if _gone(cmd):
+        cmd = re.sub(r"^\S+", lambda m: _python(), cmd, count=1)
+    return cmd
+
+
 def repair():
     """Re-point an installed tap at this checkout's tap.py (the repo may have moved)."""
     try:
@@ -71,14 +88,14 @@ def repair():
     changed = False
     sl = s.get("statusLine") or {}
     cmd = sl.get("command", "")
-    if "tap.py statusline" in cmd and str(TAP) not in cmd:
-        sl["command"] = re.sub(r"\S+tap\.py(?= statusline)", lambda m: shlex.quote(str(TAP)), cmd, count=1)
+    if "tap.py statusline" in cmd and (str(TAP) not in cmd or _gone(cmd)):
+        sl["command"] = _repoint(cmd, "statusline")
         changed = True
     for entry in (s.get("hooks") or {}).get("Notification") or []:
         for h in entry.get("hooks", []):
             c = h.get("command", "")
-            if MARK in c and "tap.py hook" in c and str(TAP) not in c:
-                h["command"] = re.sub(r"\S+tap\.py(?= hook)", lambda m: shlex.quote(str(TAP)), c, count=1)
+            if MARK in c and "tap.py hook" in c and (str(TAP) not in c or _gone(c)):
+                h["command"] = _repoint(c, "hook")
                 changed = True
     if not changed:
         return ""
@@ -146,6 +163,8 @@ def uninstall():
                 s["hooks"]["Notification"] = kept
             else:
                 del s["hooks"]["Notification"]
+            if not s["hooks"]:
+                del s["hooks"]
     if not changed:
         return "tap was not installed"
     _save(s)

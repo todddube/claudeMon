@@ -32,7 +32,14 @@ No dependencies and no build step.
 ```
 
 Put it on your PATH with `ln -s "$PWD/claudemon.py" ~/.local/bin/claudemon`.
-Needs Python 3 (developed and tested on 3.13) and a 256-colour terminal. Built on macOS; the Linux paths are untested.
+**Requirements:** macOS with Python 3.9 or newer (the `/usr/bin/python3` that comes with the Xcode
+command line tools works; tested on 3.9 and 3.13), a 256-colour terminal and a UTF-8 locale (the
+default in Terminal, iTerm and Ghostty). Linux should work but is untested. If macOS asks to install
+the command line tools the first time you run it, accept, then run it again.
+
+`--window` drives Terminal, iTerm or Ghostty through AppleScript, so macOS may ask once to let your
+terminal control it (System Settings > Privacy & Security > Automation). If you decline, just run
+`./claudemon.py` directly.
 
 ## ⚡ Install the tap for limits and alerts
 
@@ -53,7 +60,11 @@ or run `claudemon install`.
 - Your status line keeps working: the tap passes its input straight through to your original command.
 - `settings.json` is backed up to `~/.claude/claudemon/` before every change.
 - `claudemon uninstall` (or `U` `U` on Settings) restores it exactly.
-- If you move this folder, the next launch re-points the installed tap automatically.
+- If you move this folder, or the Python it was installed with disappears, the next launch re-points the installed tap automatically.
+
+The manual explains it in full (`m`, chapter "The tap"):
+
+![Manual: the tap](screenshots/manual-tap.png)
 
 ## The pages
 
@@ -117,6 +128,7 @@ Press `t` to cycle, or pick one on Settings. `b` switches graphs between solid b
 |---|---|
 | ![btop](screenshots/theme-btop.png) | ![dracula](screenshots/theme-dracula.png) |
 | ![c64](screenshots/theme-c64.png) | ![synthwave](screenshots/theme-synthwave.png) |
+| ![matrix](screenshots/theme-matrix.png) | |
 
 ## Keys
 

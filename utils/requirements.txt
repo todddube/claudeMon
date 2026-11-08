@@ -1,0 +1,8 @@
+# Only for utils/shots.py (README screenshots). claudeMon itself needs none of this.
+#
+# Also needed, but not installable with pip:
+#   - Google Chrome, Chromium or Edge (set CHROME=/path/to/browser to choose one)
+#   - macOS `sips` for the resize (built in); skipped when missing
+#
+# Optional: shrinks each PNG to 256 colours (about 3x smaller). Without it the PNGs are simply larger.
+Pillow>=9.1

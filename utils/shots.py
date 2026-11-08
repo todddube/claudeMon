@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Render README screenshots of every page from synthetic demo data.
 
-    tools/shots.py                    # every shot into ./screenshots
-    tools/shots.py token-burn tasks   # only these
+    utils/shots.py                    # every shot into ./screenshots
+    utils/shots.py token-burn tasks   # only these
 
 No display is needed. For each shot it regenerates the demo data (fresh
 timestamps), runs claudeMon headless to capture its screen buffer, draws that
@@ -24,35 +24,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "screenshots"
 DEMO = Path(tempfile.gettempdir()) / "claudemon-demo"
-SIZE = "150x46"
 FONT_PX = 17.2                    # Menlo: glyph height 1.164em = 20 px, so box-drawing lines join between rows
 CELL_W, CELL_H = FONT_PX * 0.602, 20
-FINAL_WIDTH = 1900
 DEFAULT_BG, DEFAULT_FG = (22, 22, 24), (214, 214, 214)
 
-# name, page (see App.go), theme, tap installed
-SHOTS = [
-    ("token-burn", "token", "claude", True),
-    ("tasks", "tasks", "claude", True),
-    ("context", "context", "claude", True),
-    ("prompt-cache", "prompt cache", "claude", True),
-    ("traffic", "traffic", "claude", True),
-    ("models", "models", "claude", True),
-    ("session-limit", "session", "claude", True),
-    ("weekly-limit", "weekly", "claude", True),
-    ("projects", "projects", "claude", True),
-    ("inspect", "inspect:web shop", "claude", True),
-    ("settings", "settings", "claude", True),
-    ("manual", "manual", "claude", True),
-    ("manual-tap", "manual:tap", "claude", False),
-    ("first-run-prompt", "prompt", "claude", False),
-    ("tap-needed", "session", "claude", False),
-    ("theme-btop", "token", "btop", True),
-    ("theme-dracula", "tasks", "dracula", True),
-    ("theme-c64", "models", "c64", True),
-    ("theme-synthwave", "session", "synthwave", True),
-    ("theme-matrix", "context", "matrix", True),
-]
+# name, page (see App.go), theme, tap installed, graph style, grid size, final width, ascii fallback
+FULL, SMALL = ("150x46", 1900), ("110x32", 1300)
+SHOTS = [(n, p, "claude", tap, "blocks") + FULL + (False,) for n, p, tap in (
+    ("token-burn", "token", True), ("tasks", "tasks", True), ("context", "context", True),
+    ("prompt-cache", "prompt cache", True), ("traffic", "traffic", True), ("models", "models", True),
+    ("session-limit", "session", True), ("weekly-limit", "weekly", True), ("projects", "projects", True),
+    ("inspect", "inspect:web shop", True), ("settings", "settings", True), ("manual", "manual", True),
+    ("manual-tap", "manual:tap", False), ("first-run-prompt", "prompt", False), ("tap-needed", "session", False))]
+SHOTS += [("graph-" + st, "traffic", "claude", True, st) + SMALL + (False,)
+          for st in ("blocks", "braille", "dots", "line", "ascii")]
+SHOTS += [("theme-" + th, "token", th, True, "blocks") + SMALL + (False,)
+          for th in ("claude", "btop", "dracula", "nord", "gruvbox", "matrix", "amber", "c64", "synthwave", "mono")]
+SHOTS += [("ascii-fallback", "token", "claude", True, "blocks") + SMALL + (True,)]
 
 ANSI16 = [(0, 0, 0), (205, 0, 0), (0, 205, 0), (205, 205, 0), (0, 0, 238), (205, 0, 205), (0, 205, 205), (229, 229, 229),
           (127, 127, 127), (255, 0, 0), (0, 255, 0), (255, 255, 0), (92, 92, 255), (255, 0, 255), (0, 255, 255), (255, 255, 255)]
@@ -131,17 +119,17 @@ body{width:%dpx;height:%dpx;overflow:hidden}
     return doc, page_w, page_h
 
 
-def shot(chrome, name, page, theme, tap, pid):
-    env = dict(os.environ, CLAUDE_CONFIG_DIR=str(DEMO), CLAUDEMON_DEMO="1")
+def shot(chrome, name, page, theme, tap, style, size, final_width, ascii_mode, pid):
+    env = dict(os.environ, CLAUDE_CONFIG_DIR=str(DEMO), CLAUDEMON_DEMO="1", CLAUDEMON_ASCII="1" if ascii_mode else "0")
     py = sys.executable
-    subprocess.run([py, str(ROOT / "tools/make_demo.py"), str(DEMO), "--pid", str(pid)] + ([] if tap else ["--no-tap"]),
+    subprocess.run([py, str(ROOT / "utils/make_demo.py"), str(DEMO), "--pid", str(pid)] + ([] if tap else ["--no-tap"]),
                    check=True, capture_output=True)
     if tap:
         subprocess.run([py, str(ROOT / "claudemon.py"), "install"], env=env, check=True, capture_output=True)
-    run = subprocess.run([py, str(ROOT / "tools/grid.py"), SIZE, theme, page], env=env, capture_output=True, text=True)
+    run = subprocess.run([py, str(ROOT / "utils/grid.py"), size, theme, page, style], env=env, capture_output=True, text=True)
     if run.returncode:
         sys.exit("grid failed for %s:\n%s" % (name, run.stderr[-1500:]))
-    doc, w, h = build_html(json.loads(run.stdout), "claudeMon  —  %s" % SIZE.replace("x", "×"))
+    doc, w, h = build_html(json.loads(run.stdout), "claudeMon  —  %s" % size.replace("x", "×"))
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / "page.html"
         src.write_text(doc)
@@ -167,7 +155,7 @@ def shot(chrome, name, page, theme, tap, pid):
         if not png.exists():
             sys.exit("Chrome produced no screenshot for " + name)
     if shutil.which("sips"):
-        subprocess.run(["sips", "--resampleWidth", str(FINAL_WIDTH), str(png)], check=True, capture_output=True)
+        subprocess.run(["sips", "--resampleWidth", str(final_width), str(png)], check=True, capture_output=True)
     shrink(png)
     print("saved", png.relative_to(ROOT))
 
@@ -187,9 +175,9 @@ def main():
     chrome = find_chrome()
     sleeper = subprocess.Popen(["sleep", "1800"])      # a live pid to register the demo sessions under
     try:
-        for name, page, theme, tap in SHOTS:
+        for name, *spec in SHOTS:
             if not want or name in want:
-                shot(chrome, name, page, theme, tap, sleeper.pid)
+                shot(chrome, name, *spec, sleeper.pid)
     finally:
         sleeper.kill()
         shutil.rmtree(DEMO, ignore_errors=True)

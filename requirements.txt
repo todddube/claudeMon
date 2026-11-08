@@ -1,0 +1,2 @@
+# claudeMon has no third-party dependencies: it needs only Python 3.9+ and its standard library (curses).
+# Developing the screenshots? See utils/requirements.txt.

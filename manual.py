@@ -80,7 +80,7 @@ TOPICS = [
         "> g / G | graph range 5m · 15m · 1h · 6h · 24h",
         "> o | one overall chart with an output overlay line",
         "> a | include sessions that ended during the range",
-        "> b | solid blocks or fine braille graphs",
+        "> b | cycle the graph style: blocks, braille, dots, line, ascii (previews on Settings)",
         "‘Needs you’ is exact with the tap’s Notification hook. Without it claudeMon guesses: a quick "
         "tool (not Bash, Agent, web or Monitor) pending over 45 s with no transcript writes.",
     ]),

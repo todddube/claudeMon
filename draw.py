@@ -21,11 +21,27 @@ for _src, _dst in (("·", "."), ("×", "x"), ("—", "-"), ("‘’", "'"), ("�
                    ("↑", "^"), ("→", ">"), ("↓", "v"), ("∞", "8"), ("≈", "~"), ("≥", ">"), ("⌁", "~"),
                    ("⏎", "<"), ("⏲", "o"), ("─┈", "-"), ("│", "|"), ("┊", ":"), ("├┤╭╮╯╰", "+"), ("╱", "/"),
                    ("▁▂", "."), ("▃▄", "-"), ("▅▆", "="), ("▇█", "#"), ("▉▊▋▌", "#"), ("▍▎▏", ":"),
-                   ("░", "."), ("■▣", "#"), ("▲", "^"), ("▸", ">"), ("◆◈●", "*"), ("◇○", "o"), ("⚙", "*"),
+                   ("░", "."), ("▒", ":"), ("▓", "#"), ("■▣", "#"), ("▲", "^"), ("▸", ">"), ("◆◈●", "*"), ("◇○", "o"), ("⚙", "*"),
                    ("⚡", "!"), ("✉", "@"), ("✓", "+"), ("✗", "x"), ("⟲", "r"), ("⟳", "~"), ("⧗", "~")):
     for _c in _src:
         ASCII_MAP[ord(_c)] = _dst
 ascii_mode = False
+
+
+# Graph styles. `glyphs` = (full cell, partial-cell ramp by eighths) for the cell-based styles.
+STYLES = ("blocks", "braille", "dots", "line", "ascii")
+STYLE_NOTE = {
+    "blocks": "solid ▁▂▃▄▅▆▇█",
+    "braille": "fine 2×4 dots",
+    "dots": "stipple ·:░▒",
+    "line": "thin trace",
+    "ascii": "plain .-=#",
+}
+GLYPHS = {
+    "blocks": ("█", " ▁▂▃▄▅▆▇█"),
+    "dots": ("▒", " ··::░░░▒"),
+    "ascii": ("#", " ..--==##"),
+}
 
 
 def detect_ascii():
@@ -83,6 +99,7 @@ class Screen:
         self.win = win
         self.pairs = {}
         self.many_colors = curses.COLORS >= 256
+        self.style = "blocks"
         self.set_theme(theme)
 
     def set_theme(self, name):
@@ -183,7 +200,7 @@ class Screen:
         for i in range(w):
             col = color if color is not None else self.grad_color(i / max(1, w - 1))
             if i < full:
-                self.put(y, x + i, "█", col)
+                self.put(y, x + i, GLYPHS.get(self.style, GLYPHS["blocks"])[0], col)
             elif i == full and cells - full > 0.0625:
                 self.put(y, x + i, EIGHTHS[int((cells - full) * 8)], col)
             else:
@@ -199,14 +216,16 @@ class Screen:
         top = vmax or max(vals) or 1
         for i, v in enumerate(vals):
             frac = min(1.0, v / top)
-            ch = SPARK[int(round(frac * 8))] if v > 0 else SPARK[0]
+            ramp = GLYPHS.get(self.style, GLYPHS["blocks"])[1]
+            ch = ramp[int(round(frac * 8))] if v > 0 else ramp[0]
             if v > 0 and ch == " ":
-                ch = SPARK[1]
+                ch = ramp[1]
             self.put(y, x + w - len(vals) + i, ch, color if color is not None else self.grad_color(frac))
 
 
-def blocks(scr, y, x, rows, cols, values, vmax, color_fn, grid=None):
-    """Solid area chart from ▁▂▃▄▅▆▇█, one value per cell column (btop's block style)."""
+def blocks(scr, y, x, rows, cols, values, vmax, color_fn, grid=None, glyphs=None):
+    """Area chart one value per cell column: solid ▁▂▃▄▅▆▇█ (btop's block style) or any GLYPHS set."""
+    full_ch, ramp = glyphs or GLYPHS["blocks"]
     if not values or rows < 1 or cols < 1:
         return
     n = len(values)
@@ -221,9 +240,9 @@ def blocks(scr, y, x, rows, cols, values, vmax, color_fn, grid=None):
             level = rows - 1 - r                 # 0 = bottom row
             fill = eighths - level * 8
             if fill >= 8:
-                ch = "█"
+                ch = full_ch
             elif fill > 0:
-                ch = SPARK[fill]
+                ch = ramp[fill]
             else:
                 if grid is not None and r % grid[1] == grid[1] - 1:
                     scr.put(y + r, x + c, grid[0], grid[2])
@@ -297,6 +316,21 @@ class Canvas:
                 if prev is not None:
                     self.line(x - 1, prev, x, y, line_color)
                 prev = y
+
+    def trace(self, values, vmax, color_fn=None):
+        """A thin line over the full width (no fill), coloured by its height."""
+        if not values:
+            return
+        top = vmax or max(values) or 1
+        n = len(values)
+        raw = [max(0.0, min(1.0, values[min(n - 1, int(x * n / self.w))] / top)) * (self.h - 1) for x in range(self.w)]
+        ys = [int(round(sum(raw[max(0, x - 1):x + 2]) / len(raw[max(0, x - 1):x + 2]))) for x in range(self.w)]
+        for x, y in enumerate(ys):                  # 3-point smoothing so noisy data still reads as a line
+            col = color_fn(y / self.h) if color_fn else None
+            if x == 0:
+                self.dot(x, y, col)
+            else:
+                self.line(x - 1, ys[x - 1], x, y, col)
 
     def label(self, col, row, text, color):
         for i, ch in enumerate(text):

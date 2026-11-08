@@ -89,14 +89,14 @@ A terminal UI in the style of btop, syswatch and netwatch: Python stdlib only (`
 ╰ footer: key hints                                          flash / version
 ```
 
-- **Graphs.** Solid `▁▂▃▄▅▆▇█` blocks by default. `b` switches to braille (2×4 dots per cell), which is used for limit projections in either mode.
+- **Graphs.** Five styles, cycled with `b` and saved: `blocks` (solid `▁▂▃▄▅▆▇█`, the default), `braille` (2×4 dots per cell), `dots` (stippled `·:░▒`), `line` (a thin smoothed braille trace) and `ascii` (`.-=#`). They apply to every chart and sparkline; Settings previews all five on the same data. Limit projections always use braille. With a non-UTF-8 locale, `TERM=linux`/`dumb` or `--ascii`, every glyph (borders, icons, bars) is mapped to one ASCII character, so layouts do not shift.
 - **Colour.** 256-colour themes. Graphs and gauges are coloured by height through a 5-step gradient, and states use ok/warn/crit.
 - **Themes (10):** claude, btop, dracula, nord, gruvbox, matrix, amber, c64, synthwave, mono. `t` cycles through them, and Settings shows live swatches.
 - **Pages:** 1 Token burn · 2 Tasks · 3 Context · 4 Prompt cache · 5 Traffic · 6 Models · 7 Session limit · 8 Weekly limit · 9 Projects · 0 Inspect · s Settings.
 - **Tasks** is a live tree of everything running: sessions, tool calls in flight, subagents, background shells, spawned processes, MCP servers, queued prompts, Claude Desktop, daemon jobs and scheduled tasks, with a detail pane (including a live tail of a background task's output).
 - **Manual** (`m`) is built in: one chapter per page, plus the tap, the Claude Code tools and the data sources. It opens on the page you are viewing.
 - **The tap is highlighted everywhere it matters:** a yellow `⚡ tap off: press I` chip in the header and footer, `⚡ install tap` in the sidebar, a full callout on the limit pages, and a one-time prompt on first launch (install now, or later).
-- **Keys:** `1-0` page, `←→`/Tab page, `↑↓`/jk select, `⏎` inspect, `g` range (5m/15m/1h/6h/24h), `o` overall, `e` model·effort, `a` include finished sessions, `t` theme, `b` graph style, `u` update interval, `r` refresh, `m` manual, `?` help, `q` quit; `I I` installs the tap from any page, `U U` removes it on Settings (both ask for a second press).
+- **Keys:** `1-0` page, `←→`/Tab page, `↑↓`/jk select, `⏎` inspect, `g` range (5m/15m/1h/6h/24h), `o` overall, `e` model·effort, `a` include finished sessions, `t` theme, `b` graph style (blocks, braille, dots, line, ascii), `u` update interval, `r` refresh, `m` manual, `?` help, `q` quit; `I I` installs the tap from any page, `U U` removes it on Settings (both ask for a second press).
 - **State** is kept in `~/.claude/claudemon/` (config, limits log, status snapshots, settings backups). claudeMon never writes inside Claude Code's own files.
 
 ### Module map
@@ -115,8 +115,9 @@ A terminal UI in the style of btop, syswatch and netwatch: Python stdlib only (`
 | `manual.py` | The built-in manual's text |
 | `claudemon.py` | Entry point and command line |
 | `launch.py` | `--window`: opens Terminal / iTerm / Ghostty (or a Linux terminal) titled claudeMon |
-| `tools/make_demo.py` | Generates a synthetic `~/.claude` tree (sessions, subagents, limits with a blind spot) |
-| `tools/grid.py`, `tools/shots.py` | Headless screen capture and the README screenshot renderer |
+| `utils/make_demo.py` | Generates a synthetic `~/.claude` tree (sessions, subagents, limits with a blind spot) |
+| `utils/grid.py`, `utils/shots.py` | Headless screen capture and the README screenshot renderer (see `utils/README.md`) |
+| `tests/test_smoke.py` | Stdlib tests: every page in Unicode and ASCII, graph styles, tap round-trip, CLI |
 
 ### Approximations
 

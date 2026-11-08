@@ -2,6 +2,7 @@
 
 import curses
 import locale
+import math
 import os
 import sys
 import textwrap
@@ -14,7 +15,7 @@ import install
 import manual
 import tasks as tasks_mod
 from version import __version__
-from draw import Canvas, Screen, blocks, clip, detect_ascii, set_ascii
+from draw import GLYPHS, STYLE_NOTE, STYLES, Canvas, Screen, blocks, clip, detect_ascii, set_ascii
 from limits import WINDOWS
 from store import DONE, IDLE, NEEDS_YOU, WORKING, Store, short_model, weight
 from themes import ORDER as THEME_ORDER
@@ -86,7 +87,9 @@ class App:
         self.overall = False
         self.by_effort = False
         self.show_all = False
-        self.braille = cfg.get("braille", False)
+        style = cfg.get("graph") or ("braille" if cfg.get("braille") else "blocks")
+        self.style = style if style in STYLES else "blocks"
+        self.scr.style = self.style
         self.sel = 0
         self.sel_sid = None
         self.theme_cursor = THEME_ORDER.index(self.scr.theme_name)
@@ -158,26 +161,30 @@ class App:
     def grad_fn(self):
         return lambda frac: self.scr.grad_color(frac)
 
-    def chart(self, y, x, h, w, values, vmax=None, color=None, line=None, scale_fmt=ftok, grid=True):
-        """Braille area chart filling an h×w cell rectangle; returns the scale used."""
+    def chart(self, y, x, h, w, values, vmax=None, color=None, line=None, scale_fmt=ftok, grid=True, style=None):
+        """Area chart in the chosen graph style filling an h×w cell rectangle; returns the scale used."""
+        style = style or self.style
         if h < 1 or w < 2:
             return 0
         top = vmax if vmax is not None else (max(values) if values else 0)
         color_fn = (lambda f: color) if color is not None else self.grad_fn()
-        g = ("┈", max(2, h // 3), self.T("border")) if grid and h >= 4 else None
-        if self.braille:
+        g = ("." if style == "ascii" else "┈", max(2, h // 3), self.T("border")) if grid and h >= 4 else None
+        if style in ("braille", "line"):
             cv = Canvas(w, h)
-            cv.area(values, top or 1, color_fn, line)
+            if style == "line":
+                cv.trace(values, top or 1, color_fn)
+            else:
+                cv.area(values, top or 1, color_fn, line)
             cv.render(self.scr, y, x, self.T("accent"), grid=g)
         else:
-            blocks(self.scr, y, x, h, w, values, top or 1, color_fn, g)
+            blocks(self.scr, y, x, h, w, values, top or 1, color_fn, g, GLYPHS[style])
         if scale_fmt and top:
             lab = scale_fmt(top)
             self.scr.put(y, x + w - len(lab), lab, self.T("dim"))
         return top
 
     def nbuckets(self, w):
-        return max(2, min(w * (2 if self.braille else 1), self.span // 5))
+        return max(2, min(w * (2 if self.style in ("braille", "line") else 1), self.span // 5))
 
     def per_min(self, values):
         size = self.span / max(1, len(values))
@@ -284,7 +291,7 @@ class App:
 
     def save(self):
         self.cfg.update(theme=self.scr.theme_name, page=self.page, span=self.span_i, interval=self.interval_i,
-                        braille=self.braille)
+                        graph=self.style)
         config.save(self.cfg)
 
     def on_key(self, key):
@@ -335,8 +342,9 @@ class App:
             self.theme_cursor = i
             self.flash = "theme: " + THEME_ORDER[i]
         elif k == "b":
-            self.braille = not self.braille
-            self.flash = "graphs: " + ("braille" if self.braille else "blocks")
+            self.style = STYLES[(STYLES.index(self.style) + 1) % len(STYLES)]
+            self.scr.style = self.style
+            self.flash = "graphs: %s (%s)" % (self.style, STYLE_NOTE[self.style])
         elif k == "o":
             self.overall = not self.overall
         elif k == "e":
@@ -470,7 +478,7 @@ class App:
             "g / G      graph range 5m…24h      o          overall vs per-session (burn)",
             "e          model · effort split    a          include finished sessions",
             "t          next theme              u          update interval 1/2/5/10 s",
-            "b          graphs: blocks / braille",
+            "b          graph style: blocks · braille · dots · line · ascii",
             "r          refresh now             q / Esc    quit",
             "",
             "m          manual                  I I        install the tap (U U on Settings removes it)",
@@ -932,7 +940,7 @@ class App:
         scr.put(y, x + 1, "Token burn", self.T("title"), extra=curses.A_BOLD)
         tx = x + 14
         tx += self.span_toggle(y, tx)
-        self.toggles(y, tx, "Show", ["Sessions", "Overall"], 1 if self.overall else 0, "o")
+        tx_end = tx + self.toggles(y, tx, "Show", ["Sessions", "Overall"], 1 if self.overall else 0, "o")
         sessions = self.session_list()
         now = time.time()
         summary_h = 7
@@ -984,7 +992,8 @@ class App:
                 if loops:
                     tag = " ⟲%d " % len(loops)
                     scr.put(py + ph - 2, px + pw - 3 - len(tag), tag, self.T("bg") if self.T("bg") >= 0 else 16, self.T("crit"), curses.A_BOLD)
-            scr.put(gy - 1, x + w - 12, "max %s/m" % ftok(vmax), self.T("dim"))
+            if x + w - 12 > tx_end:                      # not on top of the toggles in a narrow window
+                scr.put(gy - 1, x + w - 12, "max %s/m" % ftok(vmax), self.T("dim"))
 
         # summary
         sy = y + h - summary_h
@@ -1541,10 +1550,26 @@ class App:
             self.chip(y + 2 + len(lines) + 1, ix + 2, " ⚡ I I  Install the tap ", "warn")
         py = y + len(THEME_ORDER) + 5
         if py + 6 < y + h:
-            scr.box(py, x, h - (py - y), w, "Preview")
-            vals = [abs(((i * 37) % 23) - 11) + (i % 7) for i in range(120)]
-            self.chart(py + 1, x + 1, h - (py - y) - 4, w - 2, vals, scale_fmt=None)
-            scr.gauge(y + h - 2, x + 2, w - 4, 0.72)
+            ph = h - (py - y)
+            vals = [max(1, 14 + 8 * math.sin(i / 7.0) + 4 * math.sin(i / 2.6 + 1) + 16 * math.exp(-((i - 44) / 3.0) ** 2))
+                    for i in range(72)]
+            bw = w // len(STYLES)
+            if bw < 14:                                    # too narrow for five: just the active style
+                scr.box(py, x, ph, w, "Graph style: " + self.style, "b")
+                self.chart(py + 1, x + 1, ph - 4, w - 2, vals, scale_fmt=None)
+                scr.gauge(y + h - 2, x + 2, w - 4, 0.72)
+            else:
+                for i, name in enumerate(STYLES):
+                    bx = x + i * bw
+                    cw = bw if i < len(STYLES) - 1 else w - bw * (len(STYLES) - 1)
+                    on = name == self.style
+                    scr.box(py, bx, ph, cw, name, "● b" if on else "", focus=on)
+                    keep = scr.style
+                    scr.style = name
+                    self.chart(py + 1, bx + 1, ph - 5, cw - 2, vals, scale_fmt=None, style=name)
+                    scr.gauge(py + ph - 3, bx + 2, cw - 4, 0.72)
+                    scr.style = keep
+                    scr.put(py + ph - 2, bx + 2, clip(STYLE_NOTE[name], cw - 4), self.T("dim"))
 
 
 def run(theme=None, interval=None, start=None):

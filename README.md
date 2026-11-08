@@ -20,14 +20,14 @@ cd claudeMon
 ./claudemon.py
 ```
 
-No dependencies and no build step.
+No dependencies and no build step (`requirements.txt` is intentionally empty: standard library only).
 
 ## Run
 
 ```sh
 ./claudemon.py                 # in this terminal (150×40 or larger is best)
 ./claudemon.py --window        # in its own window titled "claudeMon" (Terminal, iTerm or Ghostty)
-./claudemon.py -t dracula      # pick a theme
+./claudemon.py -t dracula      # pick a theme (t cycles, b cycles graph styles)
 ./claudemon.py -p tasks        # start on a page (name or number)
 ```
 
@@ -121,16 +121,45 @@ going in circles). `claudemon loops` prints the same report in a shell.
 ![Manual](screenshots/manual.png)
 ![Settings](screenshots/settings.png)
 
-## Themes
+## Graph styles
 
-`claude`, `btop`, `dracula`, `nord`, `gruvbox`, `matrix`, `amber`, `c64`, `synthwave`, `mono`.
-Press `t` to cycle, or pick one on Settings. `b` switches graphs between solid blocks and braille.
+Press **`b`** to cycle how every graph is drawn, from the big charts to the sidebar sparklines. Settings
+shows all five side by side on the same data, and your choice is remembered.
+
+| Style | Look |
+|---|---|
+| `blocks` | solid `▁▂▃▄▅▆▇█` columns (the default) |
+| `braille` | fine 2×4 dot area, the most detail per cell |
+| `dots` | stippled `·:░▒` shading, lighter and softer |
+| `line` | a thin braille trace with no fill, like an oscilloscope |
+| `ascii` | plain `.-=#`, for any terminal |
+
+![Graph styles on Settings](screenshots/settings.png)
+
+The same Traffic page in each style:
 
 | | |
 |---|---|
-| ![btop](screenshots/theme-btop.png) | ![dracula](screenshots/theme-dracula.png) |
-| ![c64](screenshots/theme-c64.png) | ![synthwave](screenshots/theme-synthwave.png) |
-| ![matrix](screenshots/theme-matrix.png) | |
+| ![blocks](screenshots/graph-blocks.png) | ![braille](screenshots/graph-braille.png) |
+| ![dots](screenshots/graph-dots.png) | ![line](screenshots/graph-line.png) |
+| ![ascii](screenshots/graph-ascii.png) | |
+
+Without a UTF-8 locale (or with `--ascii`) *everything*, borders and icons too, is drawn in plain ASCII:
+
+![ASCII fallback](screenshots/ascii-fallback.png)
+
+## Themes
+
+Ten themes. Press `t` to cycle, or pick one on Settings. Every theme re-colours the borders, the
+gradient gauges and the per-series chart colours.
+
+| | |
+|---|---|
+| ![claude](screenshots/theme-claude.png) | ![btop](screenshots/theme-btop.png) |
+| ![dracula](screenshots/theme-dracula.png) | ![nord](screenshots/theme-nord.png) |
+| ![gruvbox](screenshots/theme-gruvbox.png) | ![matrix](screenshots/theme-matrix.png) |
+| ![amber](screenshots/theme-amber.png) | ![c64](screenshots/theme-c64.png) |
+| ![synthwave](screenshots/theme-synthwave.png) | ![mono](screenshots/theme-mono.png) |
 
 ## Keys
 
@@ -142,7 +171,7 @@ Press `t` to cycle, or pick one on Settings. `b` switches graphs between solid b
 | `⏎` | inspect the selected session |
 | `g` / `G` | graph range 5m · 15m · 1h · 6h · 24h |
 | `o` · `e` · `a` | overall view · model·effort split · include finished sessions |
-| `t` · `b` · `u` | theme · graph style · update interval 1/2/5/10 s |
+| `t` · `b` · `u` | theme · graph style (blocks, braille, dots, line, ascii) · update interval 1/2/5/10 s |
 | `I` `I` · `U` `U` | install the tap · remove it (on Settings) |
 | `m` · `?` · `q` | manual · key help · quit |
 
@@ -164,7 +193,7 @@ claudemon install      # add the tap          claudemon uninstall   # remove it
 | `tasks.py` `procs.py` | the Tasks tree and the process snapshot |
 | `tap.py` `install.py` | the status-line tap and its reversible installer |
 | `manual.py` `launch.py` `config.py` `paths.py` | manual text, window launcher, preferences, locations |
-| `tools/` | demo data generator and the screenshot renderer |
+| `utils/` | demo data generator and the screenshot pipeline ([README](utils/README.md)) |
 
 See [SPEC.md](SPEC.md) for the analysis of Himamushi, the data sources and the design.
 
@@ -186,20 +215,9 @@ data, round-trip the tap install and uninstall, and check the CLI on an empty ho
 ## Regenerating the screenshots
 
 ```sh
-python3 tools/shots.py              # all of them into ./screenshots
-python3 tools/shots.py tasks manual # just these
+python3 utils/shots.py                 # all of them into ./screenshots
+python3 utils/shots.py tasks manual    # just these
 ```
 
-`tools/make_demo.py` writes a fake `~/.claude` (eight sessions, subagents, a background task, a
-re-read loop, five days of history, and limits with a blind spot). `tools/shots.py` runs claudeMon
-headless on it and renders the screen with headless Chrome, Chromium or Edge (set `CHROME` to
-point at one), so no display is needed. To try the demo yourself:
-
-```sh
-python3 tools/make_demo.py /tmp/demo --pid $$ && CLAUDE_CONFIG_DIR=/tmp/demo CLAUDEMON_DEMO=1 ./claudemon.py
-```
-
-## License
-
-[MIT](LICENSE). claudeMon is an independent project and is not affiliated with Anthropic or
-with the author of Himamushi.
+The pipeline needs no display and uses synthetic data; see [utils/README.md](utils/README.md) for how
+it works, how to add a screenshot and how to try the demo data yourself.

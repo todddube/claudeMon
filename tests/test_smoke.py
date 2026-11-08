@@ -51,6 +51,26 @@ class Ascii(unittest.TestCase):
             os.environ.update({k: v for k, v in keep.items() if v is not None})
 
 
+class Styles(unittest.TestCase):
+    def test_styles_have_glyph_sets_and_notes(self):
+        import draw
+        self.assertEqual(draw.STYLES, ("blocks", "braille", "dots", "line", "ascii"))
+        for st in draw.STYLES:
+            self.assertIn(st, draw.STYLE_NOTE)
+            if st in draw.GLYPHS:
+                full, ramp = draw.GLYPHS[st]
+                self.assertEqual(len(ramp), 9)
+                self.assertEqual(len(full), 1)
+
+    def test_trace_draws_a_line_not_a_fill(self):
+        import draw
+        cv = draw.Canvas(20, 6)
+        cv.trace([1, 5, 9, 5, 1, 5, 9, 5, 1, 5], 10)
+        lit = sum(bin(b).count("1") for row in cv.bits for b in row)
+        self.assertGreater(lit, 20)
+        self.assertLess(lit, cv.w * cv.h // 3)
+
+
 class Pages(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -58,16 +78,16 @@ class Pages(unittest.TestCase):
         cls.home = cls.tmp.name
         live = subprocess.Popen(["sleep", "300"])         # a live pid for the demo sessions
         cls.addClassCleanup(live.kill)
-        r = run("tools/make_demo.py", cls.home, "--pid", str(live.pid))
+        r = run("utils/make_demo.py", cls.home, "--pid", str(live.pid))
         assert r.returncode == 0, r.stderr
 
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
-    def grid(self, page, size="120x36", ascii_mode=False):
+    def grid(self, page, size="120x36", ascii_mode=False, style="blocks"):
         env = {"CLAUDE_CONFIG_DIR": self.home, "CLAUDEMON_DEMO": "1", "CLAUDEMON_ASCII": "1" if ascii_mode else "0"}
-        r = run("tools/grid.py", size, "claude", page, env=env)
+        r = run("utils/grid.py", size, "claude", page, style, env=env)
         self.assertEqual(r.returncode, 0, "%s: %s" % (page, r.stderr[-400:]))
         return json.loads(r.stdout)
 
@@ -79,6 +99,17 @@ class Pages(unittest.TestCase):
                 self.assertTrue(text.strip(), page)
                 if asc:
                     self.assertTrue(text.isascii(), "non-ASCII left on %s" % page)
+
+    def test_every_graph_style_renders_and_differs(self):
+        seen = set()
+        for st in ("blocks", "braille", "dots", "line", "ascii"):
+            g = self.grid("traffic", style=st)
+            seen.add("".join(c[0] for row in g["cells"] for c in row))
+        self.assertEqual(len(seen), 5)
+        g = self.grid("settings", size="150x46")
+        text = "\n".join("".join(c[0] for c in row) for row in g["cells"])
+        for name in ("blocks", "braille", "dots", "line", "ascii"):
+            self.assertIn(name, text)
 
     def test_small_terminal(self):
         for page in ("token", "session", "manual"):

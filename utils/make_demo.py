@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate a synthetic ~/.claude tree for demos and README screenshots.
 
-    tools/make_demo.py OUTDIR [--no-tap] [--pid PID]
+    utils/make_demo.py OUTDIR [--no-tap] [--pid PID]
     CLAUDE_CONFIG_DIR=OUTDIR CLAUDEMON_DEMO=1 ./claudemon.py
 
 Eight "live" sessions (working, needs-you, idle), subagents, a background task,

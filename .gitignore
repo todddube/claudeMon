@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# third-party reference screenshots (not ours to redistribute)
+images/

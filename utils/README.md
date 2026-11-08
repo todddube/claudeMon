@@ -81,6 +81,7 @@ The name becomes `screenshots/<name>.png`; reference it from the main README. Th
 | `manual-tap`, `first-run-prompt`, `tap-needed` | tap chapter, first-run prompt, a limit page without the tap | tap not installed |
 | `graph-blocks`, `-braille`, `-dots`, `-line`, `-ascii` | Traffic | one per graph style |
 | `theme-<name>` (10) | Token burn | one per theme |
+| `mini` | the mini view (`z`) | 74x14, the size it fits itself to with the demo's eight sessions |
 | `ascii-fallback` | Token burn | `CLAUDEMON_ASCII=1` |
 
 ## Gotchas

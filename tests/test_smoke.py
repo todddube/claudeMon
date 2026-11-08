@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-PAGES = ["token", "tasks", "context", "prompt cache", "traffic", "models", "session", "weekly",
+PAGES = ["mini", "token", "tasks", "context", "prompt cache", "traffic", "models", "session", "weekly",
          "projects", "inspect:web shop", "settings", "manual", "manual:tap", "prompt"]
 
 
@@ -110,6 +110,14 @@ class Pages(unittest.TestCase):
         text = "\n".join("".join(c[0] for c in row) for row in g["cells"])
         for name in ("blocks", "braille", "dots", "line", "ascii"):
             self.assertIn(name, text)
+
+    def test_mini_lists_every_live_session_and_both_limits(self):
+        g = self.grid("mini", size="74x14")
+        text = "\n".join("".join(c[0] for c in row) for row in g["cells"])
+        for want in ("5h", "7d", "burn", "Sessions", "tests", "release notes", "z full"):
+            self.assertIn(want, text)
+        g = self.grid("mini", size="50x8")
+        self.assertIn("more", "".join(c[0] for row in g["cells"] for c in row))
 
     def test_small_terminal(self):
         for page in ("token", "session", "manual"):

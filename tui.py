@@ -25,6 +25,8 @@ SPANS = [(300, "5m"), (900, "15m"), (3600, "1h"), (6 * 3600, "6h"), (86400, "24h
 INTERVALS = [1, 2, 5, 10]
 SIDEBAR_W = 26
 MISS_FLOOR = 2000      # a call this big with almost no cache read counts as a miss
+MINI_W, MINI_MAX = 74, 10   # mini view: window width, most session rows before "+n more"
+FULL_SIZE = (50, 160)       # rows, cols to restore when no full size was seen (matches --window)
 
 
 # ── formatting ─────────────────────────────────────────────────────────────
@@ -104,6 +106,9 @@ class App:
         self.side_cache = {}
         self.forecasts = {}
         self.last_tick = 0.0
+        self.mini = bool(cfg.get("mini"))
+        self.full_size = tuple(cfg.get("full_size") or FULL_SIZE)
+        self.sized = None            # the size this run last asked the terminal for
         self.pages = [
             ("Token burn", self.page_burn, self.side_burn),
             ("Tasks", self.page_tasks, self.side_tasks),
@@ -272,12 +277,16 @@ class App:
             if self.on_key(key) is False:
                 break
             dirty = True
+        if self.sized and self.mini:
+            self.resize(*self.full_size)          # give the terminal back the size it had
         self.save()
 
     def go(self, start):
-        """Jump to a page by number or name (page:session picks a session), or open manual[:topic] / prompt."""
+        """Jump to a page by number or name (page:session picks a session), or open manual[:topic] / prompt / mini."""
         name, _, arg = start.lower().partition(":")
-        if name == "prompt":
+        if name == "mini":
+            self.mini = True
+        elif name == "prompt":
             self.modal = "prompt"
         elif name == "manual":
             self.man_i = next((i for i, t in enumerate(manual.TOPICS) if arg and t["id"].lower().startswith(arg)), 0)
@@ -291,7 +300,7 @@ class App:
 
     def save(self):
         self.cfg.update(theme=self.scr.theme_name, page=self.page, span=self.span_i, interval=self.interval_i,
-                        graph=self.style)
+                        graph=self.style, mini=self.mini, full_size=list(self.full_size))
         config.save(self.cfg)
 
     def on_key(self, key):
@@ -306,6 +315,11 @@ class App:
             return True
         if k in ("q", "Q", "\x1b"):
             return False
+        if k == "z":
+            self.set_mini(not self.mini)
+            return True
+        if self.mini:
+            return self.key_mini(key, k)
         settings, tasks, inspect = self.idx("Settings"), self.idx("Tasks"), self.idx("Inspect")
         d = 1 if (key == curses.KEY_DOWN or k == "j") else -1 if (key == curses.KEY_UP or k == "k") else 0
         if k and k.isdigit():
@@ -376,6 +390,11 @@ class App:
         scr = self.scr
         scr.win.erase()
         h, w = scr.size
+        if self.mini:
+            self.fit_mini()
+            self.draw_mini(h, w)
+            scr.win.refresh()
+            return
         if h < 16 or w < 70:
             scr.put(0, 0, "claudeMon needs at least 70×16 (now %d×%d)" % (w, h), self.T("warn"))
             scr.win.refresh()
@@ -456,7 +475,7 @@ class App:
 
     def draw_footer(self, y, w):
         scr = self.scr
-        keys = [("1-0", "pages"), ("←→", "page"), ("↑↓", "select"), ("⏎", "inspect"), ("g", "range"),
+        keys = [("1-0", "pages"), ("z", "mini"), ("←→", "page"), ("↑↓", "select"), ("⏎", "inspect"), ("g", "range"),
                 ("o", "overall"), ("a", "all"), ("t", "theme"), ("u", "update"), ("m", "manual"), ("?", "help"), ("q", "quit")]
         x = 1
         if not self.tap_ok:
@@ -480,6 +499,7 @@ class App:
             "t          next theme              u          update interval 1/2/5/10 s",
             "b          graph style: blocks · braille · dots · line · ascii",
             "r          refresh now             q / Esc    quit",
+            "z          mini view: a small window with limits and sessions (z again restores the size)",
             "",
             "m          manual                  I I        install the tap (U U on Settings removes it)",
             "",
@@ -493,6 +513,191 @@ class App:
         self.scr.box(y, x, bh, bw, "Help", focus=True)
         for i, l in enumerate(lines):
             self.scr.put(y + 2 + i, x + 3, l, self.T("title") if i == 0 else self.T("fg"), self.T("hl_bg"))
+
+    # ── mini view ──────────────────────────────────────────────────────────
+    def resize(self, rows, cols):
+        """Ask the terminal to resize its window (xterm CSI 8 t; Terminal and iTerm honour it)."""
+        self.sized = (rows, cols)
+        if sys.stdout.isatty():
+            sys.stdout.write("\033[8;%d;%dt" % (rows, cols))
+            sys.stdout.flush()
+
+    def set_mini(self, on):
+        if on == self.mini:
+            return
+        if on:
+            h, w = self.scr.size
+            if h >= 16 and w >= 70:               # remember a real full-size window, not a tiny one
+                self.full_size = (h, w)
+            self.mini = True
+            self.fit_mini()
+        else:
+            self.mini = False
+            self.resize(*self.full_size)
+        self.flash = "mini view: z for the full view" if on else ""
+
+    def mini_rows(self):
+        n = len(self.session_list())
+        return 6 + max(1, min(n, MINI_MAX)) + (1 if n > MINI_MAX else 0)
+
+    def fit_mini(self):
+        """Keep the window just tall enough for the session list as sessions come and go."""
+        want = (self.mini_rows(), MINI_W)
+        if want != self.sized:
+            self.resize(*want)
+
+    def key_mini(self, key, k):
+        d = 1 if (key == curses.KEY_DOWN or k == "j") else -1 if (key == curses.KEY_UP or k == "k") else 0
+        if d:
+            self.move(d)
+        elif key in ("\n", "\r", curses.KEY_ENTER):
+            self.page = self.idx("Inspect")
+            self.set_mini(False)
+        elif k and (k.isdigit() or k == "s"):     # a page key opens that page in the full view
+            self.page = self.idx("Settings") if k == "s" else 9 if k == "0" else int(k) - 1
+            self.set_mini(False)
+        elif k == "t":
+            i = (THEME_ORDER.index(self.scr.theme_name) + 1) % len(THEME_ORDER)
+            self.scr.set_theme(THEME_ORDER[i])
+            self.theme_cursor = i
+            self.flash = "theme: " + THEME_ORDER[i]
+        elif k == "b":
+            self.style = STYLES[(STYLES.index(self.style) + 1) % len(STYLES)]
+            self.scr.style = self.style
+            self.flash = "graphs: " + self.style
+        elif k == "a":
+            self.show_all = not self.show_all
+            self.flash = "all recent sessions" if self.show_all else "live sessions"
+        elif k == "r":
+            self.tick(force=True)
+        elif k == "I":
+            if self.tap_ok:
+                self.flash = "tap is already installed"
+            elif self.confirm("I", "⚡ I again installs the tap"):
+                self.do_install()
+        return True
+
+    def mini_limit(self, y, w, key, label):
+        scr = self.scr
+        f = self.forecasts.get(key)
+        weekly = key == "seven_day"
+        scr.put(y, 1, label, self.T("dim"))
+        gx, gw = 5, max(8, w - 33)
+        if not f or f.pct is None:
+            scr.gauge(y, gx, gw, 0)
+            msg = "⚡ I I installs the tap" if not self.tap_ok else "waiting for data"
+            scr.put(y, gx + gw + 2, msg, self.T("warn") if not self.tap_ok else self.T("dim"), maxw=w - gx - gw - 3)
+            return
+        frac = f.pct / 100
+        scr.gauge(y, gx, gw, frac)
+        x = gx + gw + 1
+        x += scr.put(y, x, "%4d%%" % round(f.pct), scr.level_color(frac), extra=curses.A_BOLD)
+        eta = f.eta(f.rate)
+        if eta and not (f.resets and eta > f.resets):
+            note, role = "full ≈ %s" % fclock(eta, weekly), "warn"
+        elif f.resets:
+            note, role = "resets %s" % fclock(f.resets, weekly), "dim"
+        else:
+            note, role = "flat", "dim"
+        if f.stale:
+            note += " · stale"
+        scr.put(y, x + 2, note, self.T(role), maxw=w - x - 3)
+
+    def draw_mini(self, h, w):
+        scr = self.scr
+        if h < 6 or w < 40:
+            scr.put(0, 0, "mini needs 40×6 (z for the full view)", self.T("warn"))
+            return
+        now = time.time()
+        live = self.store.live_sessions()
+        bg = self.T("hl_bg")
+        scr.fill(0, 0, 1, w, bg)
+        x = scr.put(0, 1, "◆ ", self.T("accent"), bg, curses.A_BOLD) + 1
+        x += scr.put(0, x, "claudeMon", self.T("title"), bg, curses.A_BOLD)
+        clock = datetime.now().strftime("%H:%M:%S ")
+        end = w - len(clock) - 3                      # header text stops short of the clock
+        x += scr.put(0, x, "  %d live" % len(live), self.T("fg"), bg, maxw=end - x)
+        counts = Counter(s.state(now) for s in live)
+        for state in (NEEDS_YOU, WORKING, IDLE):
+            text, role = STATE_BADGE[state]
+            sym, word = text.split(" ", 1)
+            item = "  %s %d %s" % (sym, counts[state], word.lower())
+            if counts[state] and x + len(item) <= end:
+                x += scr.put(0, x, item, self.T(role), bg, curses.A_BOLD if state == NEEDS_YOU else 0)
+        dot = self.T("ok") if now - self.last_tick < self.interval + 2 else self.T("crit")
+        scr.put(0, w - len(clock) - 2, "●", dot, bg)
+        scr.put(0, w - len(clock), clock, self.T("dim"), bg)
+
+        self.mini_limit(1, w, "five_hour", "5h")
+        self.mini_limit(2, w, "seven_day", "7d")
+
+        spark = self.store.series(1800, 30, lambda c: c.usage.total)
+        burn = self.store.series(60, 1, lambda c: c.usage.total)[0]
+        scr.put(3, 1, "burn", self.T("dim"))
+        sw = max(8, min(30, w - 46))
+        scr.spark(3, 6, spark, sw)
+        x = 7 + sw
+        x += scr.put(3, x, "%s/min" % ftok(burn), self.T("fg"), extra=curses.A_BOLD)
+        warm = sum(1 for s in live if (s.t.cache_expires() or 0) > now)
+        u = self.store.totals(now - 300)
+        hit = u.cache_read / u.prompt if u.prompt else None
+        scr.put(3, x, "   cache %d/%d warm · hit %s" % (warm, len(live), fpct(hit)), self.T("dim"), maxw=w - x - 1)
+
+        scr.put(4, 0, "─" * w, self.T("border"))
+        scr.put(4, 2, " Sessions ", self.T("title"), extra=curses.A_BOLD)
+
+        sessions = self.session_list()
+        sel = self.selected(sessions)
+        room = max(1, h - 6)
+        shown = sessions[:room] if len(sessions) <= room else sessions[:room - 1]
+        if sel in sessions and sel not in shown:              # keep the selection on screen
+            shown = shown[:-1] + [sel]
+        y = 5
+        if not sessions:
+            scr.put(y, 2, "no live Claude Code sessions", self.T("dim"))
+        nw = max(8, w - 50)                           # columns after the name: model 18, ctx 8, rate 9, doing 12
+        for s in shown:
+            focus = s is sel
+            rbg = bg if focus else None
+            if focus:
+                scr.fill(y, 0, 1, w, bg)
+                scr.put(y, 0, "▌", self.T("accent"), rbg)
+            state = s.state(now)
+            text, role = STATE_BADGE[state]
+            scr.put(y, 1, text.split(" ", 1)[0], self.T(role), rbg, curses.A_BOLD)
+            scr.put(y, 3, clip(s.name, nw - 1), self.T("title") if focus else self.T("fg"), rbg,
+                    curses.A_BOLD if state == NEEDS_YOU or focus else 0)
+            x = 3 + nw
+            scr.put(y, x, clip("%s·%s" % (short_model(s.model), s.effort or "?"), 17), self.T("dim"), rbg)
+            used, size = s.context()
+            frac = used / size if size else 0
+            scr.put(y, x + 18, "ctx", self.T("dim"), rbg)
+            scr.put(y, x + 22, "%4s" % fpct(frac), scr.level_color(frac), rbg)
+            rate = self.store.series(60, 1, lambda c: c.usage.total, [s])[0]
+            scr.put(y, x + 26, "%8s" % (ftok(rate) + "/m"), self.T("fg"), rbg)
+            pending = sorted(s.t.pending_tools.values(), key=lambda p: p[1] or 0)
+            agents = sum(1 for a in s.agents.values() if not a.finished)
+            doing = pending[-1][0] if pending else ""
+            if agents:
+                doing = ("%s ◇%d" % (doing, agents)).strip()
+            n_loops = len(s.loops())
+            if n_loops:
+                doing = ("%s ⟲%d" % (doing, n_loops)).strip()
+            scr.put(y, x + 36, clip(doing, w - x - 37), self.T("crit") if n_loops else self.T("info"), rbg)
+            y += 1
+        if len(sessions) > len(shown):
+            scr.put(y, 3, "+%d more (z for the full view)" % (len(sessions) - len(shown)), self.T("dim"))
+
+        fy = h - 1
+        msg = self.flash or ("" if self.tap_ok else "⚡ tap off: I I")
+        x = 1
+        for key, label in (("z", "full"), ("q", "quit"), ("↑↓", "select"), ("⏎", "inspect"), ("1-0", "page"), ("t", "theme")):
+            if x + len(key) + len(label) + 3 > w - len(msg) - 2:
+                break
+            x += scr.put(fy, x, key, self.T("accent"), extra=curses.A_BOLD)
+            x += scr.put(fy, x, " %s  " % label, self.T("dim"))
+        if msg:
+            scr.put(fy, w - len(msg) - 2, msg, self.T("info") if self.flash else self.T("warn"))
 
     # ── tap prompt, manual, install ────────────────────────────────────────
     def idx(self, title):
@@ -1572,7 +1777,7 @@ class App:
                     scr.put(py + ph - 2, bx + 2, clip(STYLE_NOTE[name], cw - 4), self.T("dim"))
 
 
-def run(theme=None, interval=None, start=None):
+def run(theme=None, interval=None, start=None, mini=False):
     try:
         locale.setlocale(locale.LC_ALL, "")      # curses needs this to draw UTF-8 (blocks, box lines)
     except locale.Error:
@@ -1583,6 +1788,8 @@ def run(theme=None, interval=None, start=None):
         cfg["theme"] = theme
     if interval:
         cfg["interval"] = INTERVALS.index(interval) if interval in INTERVALS else 1
+    if mini or start:
+        cfg["mini"] = mini              # an explicit page opens the full view
     note = install.repair()          # keeps an installed tap working if this folder moved
     if note:
         cfg["flash"] = note

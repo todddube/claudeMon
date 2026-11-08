@@ -3,6 +3,7 @@
 
   claudemon                 run the TUI in this terminal
   claudemon --window        open it in a new terminal window titled claudeMon
+  claudemon --mini          start in the mini view (z switches between mini and full)
   claudemon install         add the status-line tap + Notification hook
   claudemon uninstall       remove them and restore your status line
   claudemon loops           print files re-read 3+ times with no edit between
@@ -70,8 +71,9 @@ def main(argv=None):
     p.add_argument("-t", "--theme", choices=ORDER)
     p.add_argument("-i", "--interval", type=int, choices=[1, 2, 5, 10])
     p.add_argument("-p", "--page", help="start on a page (number or name), or manual[:topic] / prompt")
+    p.add_argument("-z", "--mini", action="store_true", help="start in the small mini view (z toggles it)")
     p.add_argument("--ascii", action="store_true", help="draw with plain ASCII (automatic when the locale is not UTF-8)")
-    p.add_argument("--size", default="160x50", help="window size for --window, e.g. 150x46")
+    p.add_argument("--size", help="window size for --window, e.g. 150x46 (default 160x50, or 74x12 with --mini)")
     p.add_argument("--hours", type=int, default=24, help="look-back for `loops`")
     p.add_argument("-V", "--version", action="version", version="claudemon " + __version__)
     args = p.parse_args(argv)
@@ -95,14 +97,16 @@ def main(argv=None):
             extra += ["--page", args.page]
         if args.ascii:
             extra += ["--ascii"]
-        print(open_window(args.terminal, extra, args.size))
+        if args.mini:
+            extra += ["--mini"]
+        print(open_window(args.terminal, extra, args.size or ("74x12" if args.mini else "160x50")))
     else:
         if not sys.stdout.isatty():
             sys.exit("claudemon needs a terminal; try `claudemon --window` or `claudemon snapshot`")
         if args.ascii:
             os.environ["CLAUDEMON_ASCII"] = "1"
         from tui import run
-        run(args.theme, args.interval, args.page)
+        run(args.theme, args.interval, args.page, args.mini)
 
 
 if __name__ == "__main__":

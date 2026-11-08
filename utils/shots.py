@@ -40,6 +40,7 @@ SHOTS += [("graph-" + st, "traffic", "claude", True, st) + SMALL + (False,)
           for st in ("blocks", "braille", "dots", "line", "ascii")]
 SHOTS += [("theme-" + th, "token", th, True, "blocks") + SMALL + (False,)
           for th in ("claude", "btop", "dracula", "nord", "gruvbox", "matrix", "amber", "c64", "synthwave", "mono")]
+SHOTS += [("mini", "mini", "claude", True, "blocks", "74x14", 1000, False)]
 SHOTS += [("ascii-fallback", "token", "claude", True, "blocks") + SMALL + (True,)]
 
 ANSI16 = [(0, 0, 0), (205, 0, 0), (0, 205, 0), (205, 205, 0), (0, 0, 238), (205, 0, 205), (0, 205, 205), (229, 229, 229),

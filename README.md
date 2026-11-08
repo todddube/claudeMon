@@ -27,6 +27,7 @@ No dependencies and no build step (`requirements.txt` is intentionally empty: st
 ```sh
 ./claudemon.py                 # in this terminal (150×40 or larger is best)
 ./claudemon.py --window        # in its own window titled "claudeMon" (Terminal, iTerm or Ghostty)
+./claudemon.py --mini          # start in the mini view (z switches between mini and full)
 ./claudemon.py -t dracula      # pick a theme (t cycles, b cycles graph styles)
 ./claudemon.py -p tasks        # start on a page (name or number)
 ```
@@ -71,6 +72,16 @@ The manual explains it in full (`m`, chapter "The tap"):
 ## The pages
 
 Jump with `1`–`9`, `0` and `s`, or `←` `→`. Press **`m`** on any page for the manual chapter about it.
+
+### Mini view: the essentials in a small window
+
+Press **`z`** on any page (or start with `--mini`). claudeMon shrinks its window to fit: both limits
+with their forecast, the overall burn and cache, and one line per live session with its state, model
+and effort, context, tokens per minute and the tool it is running. The window grows and shrinks as
+sessions come and go. Press `z` again, `⏎` (Inspect) or a page key and it returns to its full size.
+Resizing works in Terminal and iTerm; in other terminals, tmux or full screen the size is left alone.
+
+![Mini view](screenshots/mini.png)
 
 ### Tasks: everything Claude is doing right now
 

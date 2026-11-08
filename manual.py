@@ -28,7 +28,17 @@ TOPICS = [
         "> ⏎ | open the selected session in Inspect",
         "> m | this manual (opens on the page you are viewing)",
         "> ? | quick key reference",
+        "> z | mini view (see below)",
         "> q Esc | quit",
+        "# Mini view",
+        "Press z for a small window that keeps the essentials in sight: both limits with their "
+        "forecast, the overall burn, prompt cache warmth, and one line per live session with its "
+        "state, model and effort, context, tokens per minute and the tool it is running (◇ subagents, "
+        "⟲ re-read loops). Sessions that need you sort to the top.",
+        "claudeMon resizes the window to fit the session list, and puts the old size back when you "
+        "press z again or quit. Terminal and iTerm honour this; in other terminals, tmux or a "
+        "full-screen window the size stays as it is. In mini, ⏎ opens Inspect and a page key opens "
+        "that page, both in the full view. `claudemon --mini` starts in it, and it is remembered.",
         "# Two things that need the tap",
         "Most pages work out of the box. The Session limit and Weekly limit pages, the per-session "
         "cost, the exact context window size and reliable ‘Needs you’ alerts all come from the tap. "

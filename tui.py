@@ -14,7 +14,7 @@ import install
 import manual
 import tasks as tasks_mod
 from version import __version__
-from draw import Canvas, Screen, blocks, clip
+from draw import Canvas, Screen, blocks, clip, detect_ascii, set_ascii
 from limits import WINDOWS
 from store import DONE, IDLE, NEEDS_YOU, WORKING, Store, short_model, weight
 from themes import ORDER as THEME_ORDER
@@ -1552,6 +1552,7 @@ def run(theme=None, interval=None, start=None):
         locale.setlocale(locale.LC_ALL, "")      # curses needs this to draw UTF-8 (blocks, box lines)
     except locale.Error:
         pass
+    set_ascii(detect_ascii())
     cfg = config.load()
     if theme:
         cfg["theme"] = theme

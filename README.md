@@ -33,8 +33,10 @@ No dependencies and no build step.
 
 Put it on your PATH with `ln -s "$PWD/claudemon.py" ~/.local/bin/claudemon`.
 **Requirements:** macOS with Python 3.9 or newer (the `/usr/bin/python3` that comes with the Xcode
-command line tools works; tested on 3.9 and 3.13), a 256-colour terminal and a UTF-8 locale (the
-default in Terminal, iTerm and Ghostty). Linux should work but is untested. If macOS asks to install
+command line tools works; tested on 3.9 and 3.13), a 256-colour terminal and, ideally, a UTF-8 locale (the
+default in Terminal, iTerm and Ghostty). Without one (a C locale, the Linux console, `TERM=dumb`) claudeMon
+switches to plain-ASCII drawing by itself; force it with `--ascii` or `CLAUDEMON_ASCII=1`, or turn it off with
+`CLAUDEMON_ASCII=0`. Linux should work but is untested. If macOS asks to install
 the command line tools the first time you run it, accept, then run it again.
 
 `--window` drives Terminal, iTerm or Ghostty through AppleScript, so macOS may ask once to let your
@@ -171,6 +173,15 @@ See [SPEC.md](SPEC.md) for the analysis of Himamushi, the data sources and the d
 claudeMon reads `~/.claude` (transcripts, the live session registry, jobs, scheduled tasks) and the
 process list, and writes only to `~/.claude/claudemon/`. Nothing leaves your machine. The
 screenshots above use synthetic demo data, never real sessions.
+
+## Tests
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
+Standard library only. They render every page (Unicode and ASCII, plus a tiny terminal) from the demo
+data, round-trip the tap install and uninstall, and check the CLI on an empty home.
 
 ## Regenerating the screenshots
 

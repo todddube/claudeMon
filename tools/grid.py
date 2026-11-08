@@ -61,6 +61,7 @@ def main():
     size, theme, page = sys.argv[1], sys.argv[2], sys.argv[3]
     cols, _, rows = size.partition("x")
     cols, rows = int(cols), int(rows)
+    import draw
     import tui
     from store import Store
 
@@ -70,6 +71,7 @@ def main():
         if store.indexed:
             break
         time.sleep(.1)
+    draw.set_ascii(draw.detect_ascii())
     win = FakeWin(rows, cols)
     app = tui.App(win, store, {"theme": theme, "tap_prompt_seen": True})
     app.tick(force=True)

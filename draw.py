@@ -2,6 +2,7 @@
 multi-colour gauges and a braille canvas for area charts and projections."""
 
 import curses
+import os
 import unicodedata
 
 from themes import THEMES
@@ -11,6 +12,56 @@ BRAILLE = 0x2800
 DOTS = ((0x01, 0x02, 0x04, 0x40), (0x08, 0x10, 0x20, 0x80))
 EIGHTHS = " ▏▎▍▌▋▊▉█"
 SPARK = " ▁▂▃▄▅▆▇█"
+
+
+# Plain-ASCII drawing for terminals that cannot show UTF-8 (a C/POSIX locale, a linux console, a
+# serial line). Every glyph the UI uses maps to one ASCII character, so layouts do not shift.
+ASCII_MAP = {}
+for _src, _dst in (("·", "."), ("×", "x"), ("—", "-"), ("‘’", "'"), ("•", "*"), ("…", "~"), ("←", "<"),
+                   ("↑", "^"), ("→", ">"), ("↓", "v"), ("∞", "8"), ("≈", "~"), ("≥", ">"), ("⌁", "~"),
+                   ("⏎", "<"), ("⏲", "o"), ("─┈", "-"), ("│", "|"), ("┊", ":"), ("├┤╭╮╯╰", "+"), ("╱", "/"),
+                   ("▁▂", "."), ("▃▄", "-"), ("▅▆", "="), ("▇█", "#"), ("▉▊▋▌", "#"), ("▍▎▏", ":"),
+                   ("░", "."), ("■▣", "#"), ("▲", "^"), ("▸", ">"), ("◆◈●", "*"), ("◇○", "o"), ("⚙", "*"),
+                   ("⚡", "!"), ("✉", "@"), ("✓", "+"), ("✗", "x"), ("⟲", "r"), ("⟳", "~"), ("⧗", "~")):
+    for _c in _src:
+        ASCII_MAP[ord(_c)] = _dst
+ascii_mode = False
+
+
+def detect_ascii():
+    """True when the terminal should get ASCII: forced by CLAUDEMON_ASCII, or a non-UTF-8 locale."""
+    forced = os.environ.get("CLAUDEMON_ASCII", "")
+    if forced:
+        return forced not in ("0", "false", "no")
+    if os.environ.get("TERM", "") in ("linux", "vt100", "vt220", "dumb"):
+        return True
+    # Python coerces a C locale to UTF-8 for itself, but curses still follows the environment.
+    for var in ("LC_ALL", "LC_CTYPE", "LANG"):
+        val = os.environ.get(var)
+        if val:
+            return "utf" not in val.lower().replace("_", "-")
+    return True
+
+
+def set_ascii(on):
+    global ascii_mode
+    ascii_mode = bool(on)
+
+
+def to_ascii(text):
+    if text.isascii():
+        return text
+    out = []
+    for ch in text:
+        o = ord(ch)
+        if o < 128:
+            out.append(ch)
+        elif 0x2800 <= o <= 0x28FF:                  # braille cell: by number of dots
+            n = bin(o - 0x2800).count("1")
+            out.append(" " if n == 0 else "." if n <= 2 else ":" if n <= 5 else "#")
+        else:
+            out.append(ASCII_MAP.get(o, "?"))
+    return "".join(out)
 
 
 def width(text):
@@ -78,6 +129,8 @@ class Screen:
         text = text[: max(0, room)]
         if not text:
             return 0
+        if ascii_mode:
+            text = to_ascii(text)
         try:
             self.win.addstr(y, x, text, self.attr(self.t["fg"] if fg is None else fg, bg, extra))
         except curses.error:

@@ -1,0 +1,57 @@
+{
+  // Window colors taken from claudeMon's own "claude" theme (themes.py):
+  // accent 209 #ff875f, title 216 #ffaf87, teal 66/73, gold 179, ok 114, warn 221, crit 203.
+  "folders": [
+    { "path": "." }
+  ],
+  "settings": {
+    "workbench.colorCustomizations": {
+      "titleBar.activeBackground": "#262a33",
+      "titleBar.activeForeground": "#ffaf87",
+      "titleBar.inactiveBackground": "#1f222a",
+      "titleBar.inactiveForeground": "#808080",
+      "titleBar.border": "#ff875f",
+
+      "activityBar.background": "#262a33",
+      "activityBar.foreground": "#ff875f",
+      "activityBar.inactiveForeground": "#808080",
+      "activityBar.activeBorder": "#ff875f",
+      "activityBarBadge.background": "#5fafaf",
+      "activityBarBadge.foreground": "#1f222a",
+
+      "sideBar.background": "#22252d",
+      "sideBarTitle.foreground": "#ffaf87",
+      "sideBarSectionHeader.background": "#262a33",
+      "sideBarSectionHeader.foreground": "#ffaf87",
+
+      "statusBar.background": "#ff875f",
+      "statusBar.foreground": "#1f222a",
+      "statusBar.border": "#ff875f",
+      "statusBarItem.hoverBackground": "#ffaf87",
+      "statusBarItem.remoteBackground": "#5f8787",
+      "statusBarItem.remoteForeground": "#d0d0d0",
+      "statusBar.debuggingBackground": "#d7af5f",
+      "statusBar.debuggingForeground": "#1f222a",
+      "statusBar.noFolderBackground": "#5f8787",
+
+      "tab.activeBorderTop": "#ff875f",
+      "tab.activeForeground": "#ffaf87",
+      "panelTitle.activeBorder": "#ff875f",
+      "focusBorder": "#ff875f99",
+      "progressBar.background": "#ff875f",
+      "badge.background": "#5fafaf",
+      "badge.foreground": "#1f222a",
+
+      "terminal.background": "#262a33",
+      "terminal.foreground": "#d0d0d0",
+      "terminalCursor.foreground": "#ff875f",
+      "terminal.ansiRed": "#ff5f5f",
+      "terminal.ansiGreen": "#87d787",
+      "terminal.ansiYellow": "#ffd75f",
+      "terminal.ansiBlue": "#87afd7",
+      "terminal.ansiCyan": "#5fafaf",
+      "terminal.ansiBrightRed": "#ff875f"
+    },
+    "window.title": "claudeMon${separator}${activeEditorShort}"
+  }
+}

@@ -21,6 +21,9 @@ WINDOWS = {
 GAP_S = 15 * 60          # longer than this without an observation = blind spot
 GAP_MIN_JUMP = 1.0        # points: smaller rises after a silent gap (e.g. the first message of a day) are not blind spots
 STALE_S = 15 * 60        # forecast is flagged stale after this long
+KEEP_S = 8 * 86400       # observations older than this are dropped (the longest window is 7 days)
+COMPACT_BYTES = 1 << 20  # compact limits.jsonl at startup once it is larger than this
+SAME_WINDOW_S = 600      # resets values this close belong to the same limit window
 
 
 def to_epoch(value):
@@ -63,9 +66,86 @@ class Forecast:
         return self.observed is not None and time.time() - self.observed > STALE_S
 
 
+def _num(v):
+    """A finite float from an int/float (not bool), else None."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    v = float(v)
+    return v if v == v and abs(v) != float("inf") else None
+
+
+def parse_row(rec):
+    """[(window key, Obs)] from one limits.jsonl record; [] for anything malformed."""
+    if not isinstance(rec, dict):
+        return []
+    ts = _num(rec.get("ts"))
+    if ts is None:
+        return []
+    out = []
+    for key in WINDOWS:
+        w = rec.get(key)
+        if not isinstance(w, dict):
+            continue
+        pct = w.get("pct")
+        if isinstance(pct, str):
+            try:
+                pct = float(pct)
+            except ValueError:
+                continue
+        pct = _num(pct)
+        if pct is None:
+            continue
+        sid = rec.get("sid")
+        out.append((key, Obs(ts, pct, to_epoch(w.get("resets")), sid if isinstance(sid, str) else None)))
+    return out
+
+
+def compact(path=LIMITS_LOG, now=None, keep_s=KEEP_S, min_bytes=COMPACT_BYTES):
+    """Drop rows older than keep_s once the log is larger than min_bytes. Never raises."""
+    now = now or time.time()
+    try:
+        if os.path.getsize(path) <= min_bytes:
+            return False
+        with open(path, "rb") as fh:
+            data = fh.read()
+        lines = data.splitlines(True)
+        keep = []
+        for raw in lines:
+            try:
+                rec = json.loads(raw)
+            except ValueError:
+                continue
+            ts = _num(rec.get("ts")) if isinstance(rec, dict) else None
+            if ts is not None and now - ts <= keep_s and raw.endswith(b"\n"):
+                keep.append(raw)
+        if len(keep) == len(lines):
+            return False                      # nothing to drop: leave the file alone
+        tmp = "%s.%d.tmp" % (path, os.getpid())
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.writelines(keep)
+                with open(path, "rb") as cur:     # rows the tap appended while we worked
+                    cur.seek(len(data))
+                    fh.write(cur.read())
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 class LimitLog:
     def __init__(self, path=LIMITS_LOG):
         self.path = path
+        self._reset()
+
+    def _reset(self):
         self.offset = 0
         self.obs = {k: [] for k in WINDOWS}
         self.plan = ""
@@ -75,13 +155,16 @@ class LimitLog:
             size = os.path.getsize(self.path)
         except OSError:
             return
-        if size < self.offset:
-            self.__init__(self.path)
+        if size < self.offset:                # rewritten (compacted or truncated): start over
+            self._reset()
         if size == self.offset:
             return
-        with open(self.path, "rb") as fh:
-            fh.seek(self.offset)
-            data = fh.read()
+        try:
+            with open(self.path, "rb") as fh:
+                fh.seek(self.offset)
+                data = fh.read()
+        except OSError:
+            return
         end = data.rfind(b"\n") + 1
         self.offset += end
         for raw in data[:end].splitlines():
@@ -89,10 +172,12 @@ class LimitLog:
                 rec = json.loads(raw)
             except ValueError:
                 continue
-            for key in WINDOWS:
-                w = rec.get(key)
-                if w and w.get("pct") is not None:
-                    self.obs[key].append(Obs(rec["ts"], float(w["pct"]), to_epoch(w.get("resets")), rec.get("sid")))
+            for key, o in parse_row(rec):
+                self.obs[key].append(o)
+        cutoff = time.time() - KEEP_S
+        for key, obs in self.obs.items():
+            if obs and obs[0].ts < cutoff:
+                self.obs[key] = [o for o in obs if o.ts >= cutoff]
 
     def forecast(self, key, local_tokens_between=None):
         """Forecast one window. `local_tokens_between(t0, t1)` lets gaps be
@@ -103,10 +188,27 @@ class LimitLog:
         if not obs:
             f.note = "no data yet: install the status-line tap"
             return f
-        last = obs[-1]
-        f.pct, f.resets, f.observed = last.pct, last.resets, last.ts
-        start = (last.resets - cfg["span"]) if last.resets else last.ts - cfg["span"]
-        period = [o for o in obs if o.ts >= start and (not last.resets or not o.resets or abs(o.resets - last.resets) < 600)]
+        # The current window is the newest one any session reported (the last row
+        # may come from an idle session still showing the previous window).
+        newest = max(obs, key=lambda o: o.ts)
+        resets = max((o.resets for o in obs if o.resets), default=None)
+        start = (resets - cfg["span"]) if resets else newest.ts - cfg["span"]
+        period = sorted((o for o in obs if o.ts >= start
+                         and (not resets or not o.resets or abs(o.resets - resets) < SAME_WINDOW_S)),
+                        key=lambda o: o.ts)
+        # Usage never falls within a window, so a lower reading is stale (another
+        # session re-rendering an old value): keep the running maximum only.
+        # Without a reset time a drop may be a real reset, so nothing is filtered then.
+        if resets:
+            mono, peak = [], None
+            for o in period:
+                if peak is None or o.pct >= peak:
+                    mono.append(o)
+                    peak = o.pct
+            period = mono
+        period = period or [newest]
+        last = period[-1]
+        f.pct, f.resets, f.observed = last.pct, resets or last.resets, last.ts
         f.points = [(o.ts, o.pct) for o in period]
 
         # split into attributed intervals and blind-spot jumps

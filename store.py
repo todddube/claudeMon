@@ -8,19 +8,25 @@ Sources, all read-only:
   ~/.claude/claudemon/status/<sid>.hook.json  last hook event (from the tap)
 """
 
+import calendar
 import glob
 import json
 import os
+import re
 import threading
 import time
 
 from limits import LimitLog
+from limits import compact as compact_limits
 from paths import JOBS_DIR, PROJECTS_DIR, SCHEDULED_DIR, SESSIONS_DIR, STATUS_DIR
 from procs import Processes
 from transcript import Transcript, Usage
 
 HISTORY_S = 8 * 86400           # transcripts this recent feed the history pages
 RESCAN_S = 20                   # how often to look for new transcript files
+AGENT_SILENT_S = 600            # a subagent silent this long (and not mid-tool) counts as finished
+AGENT_TOOL_MAX_S = 2 * 3600     # ...but one waiting on a tool is trusted for up to this long
+PID_START_SLACK_S = 120         # registry startedAt vs the process's real start: more apart = pid reused
 BIG_CONTEXT = ("opus-5", "fable")   # families with a 1M window by default; the tap's value wins
 LONG_TOOLS = {"Agent", "Task", "Bash", "WebFetch", "WebSearch", "Monitor"}
 
@@ -35,12 +41,24 @@ def pid_alive(pid):
         return False
 
 
-def read_json(path):
+def proc_start(value):
+    """Registry procStart ("Fri Nov  6 12:47:50 2026", UTC) -> epoch seconds, or None."""
+    if not isinstance(value, str):
+        return None
     try:
-        with open(path) as fh:
-            return json.load(fh)
+        return calendar.timegm(time.strptime(" ".join(value.split()), "%a %b %d %H:%M:%S %Y"))
+    except ValueError:
+        return None
+
+
+def read_json(path):
+    """A JSON object from path, or None (missing, unreadable, invalid or not an object)."""
+    try:
+        with open(path, "rb") as fh:
+            v = json.loads(fh.read())
     except (OSError, ValueError):
         return None
+    return v if isinstance(v, dict) else None
 
 
 def weight(u):
@@ -50,13 +68,23 @@ def weight(u):
 
 
 def short_model(model):
-    m = (model or "").replace("claude-", "")
+    """claude-opus-4-7[1m] -> Opus 4.7; also us.anthropic.… prefixes, @dates and legacy claude-3-5-sonnet-…"""
+    raw = model if isinstance(model, str) else ""
+    m = re.sub(r"\[.*?\]", "", raw.lower().split("anthropic.")[-1]).split("@")[0].split(":")[0]
+    parts = m.replace("claude-", "").split("-")
     for fam in ("opus", "sonnet", "haiku", "fable"):
-        if m.startswith(fam):
-            ver = m[len(fam):].strip("-").split("-")
-            ver = ".".join(p for p in ver[:2] if p.isdigit() and len(p) <= 2)
-            return fam.capitalize() + (" " + ver if ver else "")
-    return m or "?"
+        if fam not in parts:
+            continue
+        i = parts.index(fam)
+        ver = []
+        for p in parts[i + 1:i + 3]:          # new style: family then version
+            if not (p.isdigit() and len(p) <= 2):
+                break
+            ver.append(p)
+        if not ver:                           # legacy style: version then family
+            ver = [p for p in parts[:i] if p.isdigit() and len(p) <= 2][:2]
+        return fam.capitalize() + (" " + ".".join(ver) if ver else "")
+    return raw.replace("claude-", "") or "?"
 
 
 class Agent:
@@ -76,9 +104,14 @@ class Agent:
 
     @property
     def finished(self):
-        if self.meta.get("finished"):
+        if self.meta.get("finished") or self.meta.get("stoppedByUser"):
             return True
-        return bool(self.t.last_ts) and time.time() - self.t.last_ts > 600
+        if not self.t.last_ts:
+            return False
+        silent = time.time() - max(self.t.last_ts, self.t.mtime or 0)
+        if self.t.pending_tools:              # blocked on a long tool call, not finished
+            return silent > AGENT_TOOL_MAX_S
+        return silent > AGENT_SILENT_S
 
 
 class Session:
@@ -152,22 +185,24 @@ class Session:
     def cost(self):
         return ((self.status or {}).get("cost") or {}).get("total_cost_usd")
 
+    # The indexer thread adds to these dicts while the UI thread reads them, so
+    # every reader iterates a snapshot (list(...)) rather than the live dict.
     def transcripts(self, agents=True):
         yield self.t, None
         if agents:
-            for a in self.agents.values():
+            for a in list(self.agents.values()):
                 yield a.t, a
 
     def all_calls(self, since=0):
         for t, a in self.transcripts():
-            for c in t.calls.values():
+            for c in list(t.calls.values()):
                 if c.ts and c.ts >= since:
                     yield c, a
 
     def loops(self):
         out = []
         for t, a in self.transcripts():
-            for path, n in t.loop_files.items():
+            for path, n in list(t.loop_files.items()):
                 out.append((path, n, t.reads_since_edit.get(path, 0), a))
         return sorted(out, key=lambda r: -r[1])
 
@@ -185,19 +220,28 @@ class Store:
 
     # ── discovery ──────────────────────────────────────────────────────────
     def start(self):
-        threading.Thread(target=self._index, daemon=True).start()
+        threading.Thread(target=self.index, daemon=True).start()
 
-    def _index(self):
-        paths = self._recent_transcripts()
-        self.index_progress = (0, len(paths))
-        for i, (sid, path) in enumerate(paths):
-            with self.lock:
-                s = self._session(sid, path)
-            s.t.refresh()
-            self._refresh_agents(s, scan=True)
-            self.index_progress = (i + 1, len(paths))
-        self._last_scan = time.time()
-        self.indexed = True
+    def index(self):
+        """Read every recent transcript once. Never raises; always ends with indexed=True."""
+        self.index_errors = 0
+        try:
+            paths = self._recent_transcripts()
+            self.index_progress = (0, len(paths))
+            for i, (sid, path) in enumerate(paths):
+                try:
+                    with self.lock:
+                        s = self._session(sid, path)
+                    s.t.refresh()
+                    self._refresh_agents(s, scan=True)
+                except Exception:             # one bad transcript must not stop the rest
+                    self.index_errors += 1
+                self.index_progress = (i + 1, len(paths))
+        except Exception:
+            self.index_errors += 1
+        finally:
+            self._last_scan = time.time()
+            self.indexed = True
 
     def _recent_transcripts(self):
         now = time.time()
@@ -221,19 +265,38 @@ class Store:
             folder = s.t.path[:-6] + "/subagents"
             for path in glob.glob(folder + "/agent-*.jsonl"):
                 aid = os.path.basename(path)[len("agent-"):-len(".jsonl")]
-                if aid not in s.agents:
-                    s.agents[aid] = Agent(path)
-        for a in s.agents.values():
+                with self.lock:               # both threads scan: check and insert together
+                    if aid not in s.agents:
+                        s.agents[aid] = Agent(path)
+        for a in list(s.agents.values()):
             a.refresh()
 
     # ── per-tick refresh ───────────────────────────────────────────────────
+    def is_live(self, entry, now=None):
+        """A registry entry whose process is running and is the one that wrote it.
+
+        A crash can leave sessions/<pid>.json behind; if the pid is later reused
+        by an unrelated process, its start time will not match the registry's
+        procStart (the process's own start, in UTC; unlike the session's
+        startedAt it stays put across /clear and /resume)."""
+        pid = entry.get("pid")
+        if not pid_alive(pid):
+            return False
+        p = self.procs.get(pid)
+        started = proc_start(entry.get("procStart"))
+        if p is None or started is None:
+            return True                       # no process table (demo, ps failed) or no start time: trust the pid
+        return abs(((now or time.time()) - p.elapsed) - started) <= PID_START_SLACK_S
+
     def refresh(self):
         now = time.time()
+        self.procs.refresh()                  # first: the registry check below uses it
         live = {}
         for path in glob.glob(str(SESSIONS_DIR / "*.json")):
             entry = read_json(path)
-            if entry and entry.get("sessionId") and pid_alive(entry.get("pid")):
-                live[entry["sessionId"]] = entry
+            sid = entry.get("sessionId") if entry else None
+            if isinstance(sid, str) and sid and self.is_live(entry, now):
+                live[sid] = entry
 
         rescan = now - self._last_scan > RESCAN_S
         with self.lock:
@@ -250,18 +313,23 @@ class Store:
 
         for s in sessions:
             s.live = live.get(s.sid)
-            if s.live or (rescan and self.indexed):
-                s.t.refresh()
-                self._refresh_agents(s, scan=True)
-            st = read_json(STATUS_DIR / (s.sid + ".json")) if s.live else None
-            if st:
-                s.status = st
-                self.tap_seen = True
-            hk = read_json(STATUS_DIR / (s.sid + ".hook.json")) if s.live else None
-            if hk:
-                s.hook = hk
-        self.limits.refresh()
-        self.procs.refresh()
+            try:
+                if s.live or (rescan and self.indexed):
+                    s.t.refresh()
+                    self._refresh_agents(s, scan=True)
+                st = read_json(STATUS_DIR / (s.sid + ".json")) if s.live else None
+                if st:
+                    s.status = st
+                    self.tap_seen = True
+                hk = read_json(STATUS_DIR / (s.sid + ".hook.json")) if s.live else None
+                if hk:
+                    s.hook = hk
+            except Exception:                 # one bad session must not take the others down
+                pass
+        try:
+            self.limits.refresh()
+        except Exception:
+            pass
         if any(self.limits.obs.values()):
             self.tap_seen = True
 
@@ -316,6 +384,17 @@ class Store:
         for s in sessions if sessions is not None else self.recent_sessions(since):
             for c, a in s.all_calls(since):
                 yield s, c, a
+
+    def prune_state(self, keep_s=HISTORY_S):
+        """Delete tap status files for sessions not seen in keep_s, and compact the limits log."""
+        cutoff = time.time() - keep_s
+        for path in glob.glob(str(STATUS_DIR / "*.json")):
+            try:
+                if os.path.getmtime(path) < cutoff:
+                    os.unlink(path)
+            except OSError:
+                pass
+        compact_limits()
 
     def tokens_between(self, t0, t1):
         total = 0

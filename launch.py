@@ -1,6 +1,7 @@
 """Open claudeMon in its own terminal window titled "claudeMon"."""
 
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -33,9 +34,15 @@ def _as_str(s):
     return '"%s"' % s.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def parse_size(size):
+    """'COLSxROWS' -> (cols, rows) as digit strings, or None (the values reach AppleScript)."""
+    m = re.fullmatch(r"(\d{2,4})x(\d{1,4})", size or "")
+    return (m.group(1), m.group(2)) if m else None
+
+
 def open_window(terminal=None, extra=(), size="160x50", env=None):
     cmd = _command(list(extra), env)
-    cols, _, rows = size.partition("x")
+    cols, rows = parse_size(size) or ("160", "50")
     term = (terminal or os.environ.get("CLAUDEMON_TERMINAL") or os.environ.get("TERM_PROGRAM") or "").lower()
     if sys.platform != "darwin":
         for exe, argv in (("gnome-terminal", ["--title=claudeMon", "--", "sh", "-c", cmd]),
@@ -65,5 +72,5 @@ def open_window(terminal=None, extra=(), size="160x50", env=None):
          '    set number of rows of t to %s\n'
          '  end try\n'
          '  activate\n'
-         'end tell' % (_as_str(cmd), cols or "160", rows or "50"))
+         'end tell' % (_as_str(cmd), cols, rows))
     return "opened in Terminal"

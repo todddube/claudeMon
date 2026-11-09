@@ -4,6 +4,7 @@ import curses
 import locale
 import math
 import os
+import signal
 import sys
 import textwrap
 import time
@@ -27,6 +28,31 @@ SIDEBAR_W = 26
 MISS_FLOOR = 2000      # a call this big with almost no cache read counts as a miss
 MINI_W, MINI_MAX = 74, 10   # mini view: window width, most session rows before "+n more"
 FULL_SIZE = (50, 160)       # rows, cols to restore when no full size was seen (matches --window)
+DIGITS = "1234567890"       # page keys, in page order: 1 is the first page, 0 the tenth
+
+
+def _index(value, n, default):
+    """value when it is an int in range(n), else default (config.json is user-editable)."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < n else default
+
+
+def _size(value):
+    """(rows, cols) from config, or None when it is not a plausible terminal size."""
+    if isinstance(value, (list, tuple)) and len(value) == 2 and all(isinstance(v, int) and not isinstance(v, bool) for v in value):
+        rows, cols = value
+        if 16 <= rows <= 500 and 70 <= cols <= 1000:
+            return (rows, cols)
+    return None
+
+
+def can_resize():
+    """Only Terminal and iTerm resize their window on request; tmux/screen must not be asked."""
+    force = os.environ.get("CLAUDEMON_RESIZE")
+    if force in ("0", "1"):
+        return force == "1"
+    if os.environ.get("TMUX") or os.environ.get("STY"):
+        return False
+    return os.environ.get("TERM_PROGRAM") in ("Apple_Terminal", "iTerm.app")
 
 
 # ── formatting ─────────────────────────────────────────────────────────────
@@ -81,15 +107,16 @@ class App:
     def __init__(self, win, store, cfg):
         self.store = store
         self.cfg = cfg
-        self.scr = Screen(win, cfg.get("theme", "claude"))
+        theme = cfg.get("theme")
+        self.scr = Screen(win, theme if isinstance(theme, str) else "claude")
         self.win = win
-        self.page = cfg.get("page", 0)
-        self.span_i = cfg.get("span", 1)
-        self.interval_i = cfg.get("interval", 1)
+        self.span_i = _index(cfg.get("span"), len(SPANS), 1)
+        self.interval_i = _index(cfg.get("interval"), len(INTERVALS), 1)
         self.overall = False
         self.by_effort = False
         self.show_all = False
         style = cfg.get("graph") or ("braille" if cfg.get("braille") else "blocks")
+        style = style if isinstance(style, str) else "blocks"
         self.style = style if style in STYLES else "blocks"
         self.scr.style = self.style
         self.sel = 0
@@ -107,7 +134,8 @@ class App:
         self.forecasts = {}
         self.last_tick = 0.0
         self.mini = bool(cfg.get("mini"))
-        self.full_size = tuple(cfg.get("full_size") or FULL_SIZE)
+        self.full_size = _size(cfg.get("full_size")) or FULL_SIZE
+        self.start_size = None       # the terminal's size when this run started; given back on exit
         self.sized = None            # the size this run last asked the terminal for
         self.pages = [
             ("Token burn", self.page_burn, self.side_burn),
@@ -122,6 +150,9 @@ class App:
             ("Inspect", self.page_inspect, self.side_inspect),
             ("Settings", self.page_settings, self.side_settings),
         ]
+        titles = [p[0] for p in self.pages]
+        name = cfg.get("page_name")
+        self.page = titles.index(name) if name in titles else _index(cfg.get("page"), len(self.pages), 0)
 
     # ── helpers ────────────────────────────────────────────────────────────
     @property
@@ -222,9 +253,19 @@ class App:
         now = time.time()
         if not force and now - self.last_tick < self.interval:
             return False
-        self.store.refresh()
         self.last_tick = now
-        self.forecasts = {k: self.store.limits.forecast(k, self.store.tokens_between) for k in WINDOWS}
+        try:
+            self.store.refresh()
+        except Exception as e:          # a data problem must never take the UI down
+            self.flash = "refresh error: %s" % e
+        forecasts = {}
+        for k in WINDOWS:
+            try:
+                forecasts[k] = self.store.limits.forecast(k, self.store.tokens_between)
+            except Exception:           # e.g. the indexer thread changed a dict mid-read: keep the last one
+                if k in self.forecasts:
+                    forecasts[k] = self.forecasts[k]
+        self.forecasts = forecasts
         self.tap_ok = install.installed()
         if self.want_session:
             for s in self.store.live_sessions():
@@ -248,17 +289,42 @@ class App:
         return True
 
     def run(self, start=None):
-        curses.curs_set(0)
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            pass
         self.win.nodelay(False)
         self.win.timeout(150)
-        sys.stdout.write("\033]0;claudeMon\007")
-        sys.stdout.flush()
+        h, w = self.scr.size
+        self.start_size = (h, w)
+        if h >= 16 and w >= 70:
+            self.full_size = (h, w)               # the window we were started in is a real full size
+        self.title("\033[22;0t\033]0;claudeMon\007")   # save the old title, then set ours
+        try:
+            self.loop(start)
+        except KeyboardInterrupt:                 # Ctrl-C (or SIGTERM, see run()) quits like q
+            pass
+        finally:
+            if self.sized and self.sized != self.start_size:
+                self.resize(*self.start_size)     # give the terminal back the size it had
+            self.title("\033[23;0t")              # restore the old title
+            self.save()
+
+    def title(self, seq):
+        try:
+            if sys.stdout.isatty():
+                sys.stdout.write(seq)
+                sys.stdout.flush()
+        except (OSError, ValueError):
+            pass
+
+    def loop(self, start):
         self.tick(force=True)
         if start:
             self.go(start)
-        elif not self.tap_ok and not self.cfg.get("tap_prompt_seen"):
+        elif not self.tap_ok and not self.cfg.get("tap_prompt_seen") and not self.mini:
             self.modal = "prompt"                 # first launch only; the header chip remains after Later
-            self.cfg["tap_prompt_seen"] = True
+            self.cfg["tap_prompt_seen"] = True    # (never in mini: it has no room to show the prompt)
             config.save(self.cfg)
         dirty = True
         while True:
@@ -274,12 +340,34 @@ class App:
             if key == curses.KEY_RESIZE:
                 dirty = True
                 continue
+            if key == "\x1b" and self.escape_sequence():
+                dirty = True
+                continue                          # Alt+key or an unknown sequence: not a quit
             if self.on_key(key) is False:
                 break
             dirty = True
-        if self.sized and self.mini:
-            self.resize(*self.full_size)          # give the terminal back the size it had
-        self.save()
+
+    def escape_sequence(self):
+        """After Esc: True (and the rest is swallowed) when more input follows at once,
+        i.e. an Alt+key or a sequence curses did not recognise, rather than a lone Esc."""
+        curses.napms(30)
+        self.win.nodelay(True)
+        seen = False
+        try:
+            for _ in range(16):
+                try:
+                    self.win.get_wch()
+                except curses.error:
+                    break
+                seen = True
+        finally:
+            self.win.nodelay(False)
+            self.win.timeout(150)
+        return seen
+
+    def digit_page(self, k):
+        """The page a digit key opens (1 = first ... 0 = tenth), clamped to the pages there are."""
+        return min(DIGITS.index(k), len(self.pages) - 1)
 
     def go(self, start):
         """Jump to a page by number or name (page:session picks a session), or open manual[:topic] / prompt / mini."""
@@ -292,14 +380,17 @@ class App:
             self.man_i = next((i for i, t in enumerate(manual.TOPICS) if arg and t["id"].lower().startswith(arg)), 0)
             self.man_scroll, self.modal = 0, "manual"
         else:
-            if name.isdigit():
-                self.page = 9 if name == "0" else (int(name) - 1) % len(self.pages)
+            if len(name) == 1 and name in DIGITS:
+                self.page = self.digit_page(name)
+            elif name.isdecimal() and name.isascii():
+                self.page = (int(name) - 1) % len(self.pages)
             else:
                 self.page = next((i for i, p in enumerate(self.pages) if p[0].lower().startswith(name)), self.page)
             self.want_session = arg
 
     def save(self):
-        self.cfg.update(theme=self.scr.theme_name, page=self.page, span=self.span_i, interval=self.interval_i,
+        self.cfg.update(theme=self.scr.theme_name, page=self.page, page_name=self.pages[self.page][0],
+                        span=self.span_i, interval=self.interval_i,
                         graph=self.style, mini=self.mini, full_size=list(self.full_size))
         config.save(self.cfg)
 
@@ -322,8 +413,8 @@ class App:
             return self.key_mini(key, k)
         settings, tasks, inspect = self.idx("Settings"), self.idx("Tasks"), self.idx("Inspect")
         d = 1 if (key == curses.KEY_DOWN or k == "j") else -1 if (key == curses.KEY_UP or k == "k") else 0
-        if k and k.isdigit():
-            self.page = 9 if k == "0" else int(k) - 1
+        if k is not None and len(k) == 1 and k in DIGITS:
+            self.page = self.digit_page(k)
         elif k == "s":
             self.page = settings
         elif key in (curses.KEY_RIGHT, "\t") or k == "l":
@@ -381,7 +472,10 @@ class App:
                 self.do_install()
         elif k == "U" and self.page == settings:
             if self.confirm("U", "press U again to remove the tap and restore your status line"):
-                self.flash = install.uninstall()
+                try:
+                    self.flash = install.uninstall()
+                except Exception as e:
+                    self.flash = "uninstall failed: %s" % e
                 self.tap_ok = install.installed()
         return True
 
@@ -517,10 +611,10 @@ class App:
     # ── mini view ──────────────────────────────────────────────────────────
     def resize(self, rows, cols):
         """Ask the terminal to resize its window (xterm CSI 8 t; Terminal and iTerm honour it)."""
+        if not can_resize():
+            return
         self.sized = (rows, cols)
-        if sys.stdout.isatty():
-            sys.stdout.write("\033[8;%d;%dt" % (rows, cols))
-            sys.stdout.flush()
+        self.title("\033[8;%d;%dt" % (rows, cols))
 
     def set_mini(self, on):
         if on == self.mini:
@@ -553,8 +647,8 @@ class App:
         elif key in ("\n", "\r", curses.KEY_ENTER):
             self.page = self.idx("Inspect")
             self.set_mini(False)
-        elif k and (k.isdigit() or k == "s"):     # a page key opens that page in the full view
-            self.page = self.idx("Settings") if k == "s" else 9 if k == "0" else int(k) - 1
+        elif k is not None and len(k) == 1 and (k in DIGITS or k == "s"):   # a page key opens that page in the full view
+            self.page = self.idx("Settings") if k == "s" else self.digit_page(k)
             self.set_mini(False)
         elif k == "t":
             i = (THEME_ORDER.index(self.scr.theme_name) + 1) % len(THEME_ORDER)
@@ -585,7 +679,7 @@ class App:
         gx, gw = 5, max(8, w - 33)
         if not f or f.pct is None:
             scr.gauge(y, gx, gw, 0)
-            msg = "⚡ I I installs the tap" if not self.tap_ok else "waiting for data"
+            msg = "⚡ I I installs the tap" if not self.tap_ok else "not reported" if self.not_reported(key) else "waiting for data"
             scr.put(y, gx + gw + 2, msg, self.T("warn") if not self.tap_ok else self.T("dim"), maxw=w - gx - gw - 3)
             return
         frac = f.pct / 100
@@ -675,8 +769,8 @@ class App:
             scr.put(y, x + 22, "%4s" % fpct(frac), scr.level_color(frac), rbg)
             rate = self.store.series(60, 1, lambda c: c.usage.total, [s])[0]
             scr.put(y, x + 26, "%8s" % (ftok(rate) + "/m"), self.T("fg"), rbg)
-            pending = sorted(s.t.pending_tools.values(), key=lambda p: p[1] or 0)
-            agents = sum(1 for a in s.agents.values() if not a.finished)
+            pending = sorted(list(s.t.pending_tools.values()), key=lambda p: p[1] or 0)
+            agents = sum(1 for a in list(s.agents.values()) if not a.finished)
             doing = pending[-1][0] if pending else ""
             if agents:
                 doing = ("%s ◇%d" % (doing, agents)).strip()
@@ -718,7 +812,10 @@ class App:
         return False
 
     def do_install(self):
-        self.flash = install.install()
+        try:
+            self.flash = install.install()
+        except Exception as e:
+            self.flash = "install failed: %s" % e
         self.tap_ok = install.installed()
 
     def key_prompt(self, key, k):
@@ -828,13 +925,14 @@ class App:
         scr = self.scr
         bw = min(w - 6, 78)
         text = [
-            ("p", "Limits, session cost, exact context size and ‘Needs you’ alerts come from Claude Code’s "
-                  "status line. The claudeMon tap listens there. Without it those panels stay empty; everything "
-                  "else works already."),
+            ("p", "Limits, session cost and exact context size come from Claude Code’s status line, and "
+                  "permission prompts from its Notification hook. The claudeMon tap listens there. Without it "
+                  "those panels stay empty and ‘Needs you’ is a best guess; everything else works already."),
             ("p", ""),
             ("h", "What installing does"),
             ("b", "• wraps your status line: it still prints exactly as before"),
             ("b", "• adds a Notification hook that records permission prompts"),
+            ("b", "• copies tap.py to ~/.claude/claudemon/, so moving this folder is safe"),
             ("b", "• backs up settings.json first; `claudemon uninstall` reverses everything"),
             ("p", ""),
         ]
@@ -922,10 +1020,10 @@ class App:
             kv("Context", "%s of %s  (%s)" % (ftok(used), ftok(size), fpct(used / size)))
             kv("Tokens", "%s total · %s out" % (ftok(t.total), ftok(t.output)))
             kv("Running", fdur((s.t.last_ts or now) - (s.t.started or now)))
-            kv("Subagents", "%d live of %d" % (sum(1 for a in s.agents.values() if not a.finished), len(s.agents)))
+            kv("Subagents", "%d live of %d" % (sum(1 for a in list(s.agents.values()) if not a.finished), len(s.agents)))
             if s.t.last_prompt:
                 para(s.t.last_prompt, "dim", "Last prompt")
-            for tid, (name, ts, summ) in s.t.pending_tools.items():
+            for tid, (name, ts, summ) in list(s.t.pending_tools.items()):
                 para("%s %s" % (name, summ), "warn", "Waiting on")
         elif r.kind == "tool":
             o = r.obj
@@ -947,7 +1045,7 @@ class App:
             kv("Agent id", a.id)
             for name, n in a.t.tools.most_common(4):
                 kv("Tool use", "%s ×%d" % (name, n), "dim")
-            for tid, (name, ts, summ) in a.t.pending_tools.items():
+            for tid, (name, ts, summ) in list(a.t.pending_tools.items()):
                 para("%s %s" % (name, summ), "warn", "Waiting on")
         elif r.kind == "bg":
             s, b = r.obj
@@ -1107,9 +1205,16 @@ class App:
         top, n = c.most_common(1)[0]
         return self.store.series(1800, 30, lambda c: c.usage.output), "%d models" % len(c), "%s %s" % (top, fpct(n / sum(c.values())))
 
+    def not_reported(self, key):
+        """True when the tap works but Claude Code reports no such window for this account
+        (some plans report only the weekly limit), so waiting longer will not help."""
+        return self.tap_ok and any(f and f.pct is not None for k, f in self.forecasts.items() if k != key)
+
     def side_limit(self, key):
         f = self.forecasts.get(key)
         if not f or f.pct is None:
+            if self.not_reported(key):
+                return [], "n/a", "not reported"
             return [], "no data", "⚡ install tap" if not self.tap_ok else "waiting for data"
         pts = [p for _, p in f.points][-30:]
         eta = f.eta(f.rate)
@@ -1442,6 +1547,13 @@ class App:
         weekly = key == "seven_day"
         scr.put(y, x + 1, "%s limit" % cfg["label"], self.T("title"), extra=curses.A_BOLD)
         if not f or f.pct is None:
+            if self.not_reported(key):
+                scr.box(y + 1, x, h - 1, w, "%s limit: not reported" % cfg["label"])
+                lines = ["The tap is working, but Claude Code reports no %s limit for this account;" % cfg["label"].lower(),
+                         "it reports only the other window. This page fills in if one starts being reported."]
+                for i, ln in enumerate(lines):
+                    scr.put(y + 3 + i, x + 3, ln, self.T("fg"), maxw=w - 6)
+                return
             self.tap_callout(y + 1, x, h - 1, w, "%s limit" % cfg["label"])
             return
         now = time.time()
@@ -1685,7 +1797,7 @@ class App:
         for name, cw in heads:
             scr.put(ay + 1, cx, name, self.T("dim"), extra=curses.A_UNDERLINE)
             cx += cw + 1
-        agents = sorted(s.agents.values(), key=lambda a: (a.finished, -(a.t.last_ts or 0)))
+        agents = sorted(list(s.agents.values()), key=lambda a: (a.finished, -(a.t.last_ts or 0)))
         for i, a in enumerate(agents[: max(0, ah - 3)]):
             ry = ay + 2 + i
             u = a.t.totals()
@@ -1735,8 +1847,11 @@ class App:
         ix = x + tw
         iw = w - tw
         scr.box(y + 1, ix, len(THEME_ORDER) + 3, iw, "Data sources")
-        st = install.status()
+        st = install.safe_status()
         lines = [
+            ("settings.json", st["error"], self.T("crit")),
+        ] if st["error"] else []
+        lines += [
             ("Transcripts", "read-only, ~/.claude/projects", self.T("ok")),
             ("Live registry", "~/.claude/sessions", self.T("ok")),
             ("Status-line tap", "installed" if st["statusline"] else "not installed (press I)", self.T("ok") if st["statusline"] else self.T("warn")),
@@ -1790,16 +1905,29 @@ def run(theme=None, interval=None, start=None, mini=False):
         cfg["interval"] = INTERVALS.index(interval) if interval in INTERVALS else 1
     if mini or start:
         cfg["mini"] = mini              # an explicit page opens the full view
-    note = install.repair()          # keeps an installed tap working if this folder moved
+    note = install.repair()          # keeps an installed tap working (never raises)
     if note:
         cfg["flash"] = note
     store = Store()
+    store.prune_state()
     store.start()
     os.environ.setdefault("ESCDELAY", "25")
+
+    def on_term(signum, frame):
+        raise KeyboardInterrupt      # leave through App.run's cleanup: save prefs, restore the window
+
+    try:
+        signal.signal(signal.SIGTERM, on_term)
+        signal.signal(signal.SIGHUP, on_term)
+    except (ValueError, OSError):
+        pass
 
     def main(win):
         curses.start_color()
         curses.use_default_colors()
         App(win, store, cfg).run(start)
 
-    curses.wrapper(main)
+    try:
+        curses.wrapper(main)
+    except KeyboardInterrupt:        # Ctrl-C before the loop started
+        pass

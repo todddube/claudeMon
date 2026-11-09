@@ -23,7 +23,7 @@ from themes import ORDER
 def cmd_loops(args):
     from store import Store
     store = Store()
-    store._index()
+    store.index()
     store.refresh()
     since = time.time() - args.hours * 3600
     found = False
@@ -44,7 +44,7 @@ def cmd_snapshot(args):
     from store import Store, short_model
     from tui import fpct, ftok
     store = Store()
-    store._index()
+    store.index()
     store.refresh()
     live = store.live_sessions()
     if not live:
@@ -77,6 +77,10 @@ def main(argv=None):
     p.add_argument("--hours", type=int, default=24, help="look-back for `loops`")
     p.add_argument("-V", "--version", action="version", version="claudemon " + __version__)
     args = p.parse_args(argv)
+    if args.size:
+        from launch import parse_size
+        if not parse_size(args.size):
+            p.error("--size must look like 150x46")
 
     if args.command == "install":
         print(install.install())

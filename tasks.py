@@ -7,7 +7,7 @@ drive the detail pane; `role` is a theme colour role.
 import os
 import time
 
-from store import IDLE, NEEDS_YOU, WORKING, short_model
+from store import IDLE, LONG_TOOLS, NEEDS_YOU, WORKING, short_model
 
 RECENT_DONE_S = 600          # finished background tasks stay visible this long
 QUICK_TOOL_WARN_S = 45       # a non-long-running tool pending longer than this is flagged
@@ -41,7 +41,7 @@ STATE_ROLE = {WORKING: "ok", NEEDS_YOU: "warn", IDLE: "dim"}
 
 def _tool_rows(t, depth, now, long_tools):
     rows = []
-    for tid, (name, ts, summary) in sorted(t.pending_tools.items(), key=lambda kv: kv[1][1] or 0):
+    for tid, (name, ts, summary) in sorted(list(t.pending_tools.items()), key=lambda kv: kv[1][1] or 0):
         if name in ("Agent", "Task"):
             continue                              # shown as the subagent itself
         age = now - ts if ts else 0
@@ -53,7 +53,6 @@ def _tool_rows(t, depth, now, long_tools):
 
 
 def build(store, now=None):
-    from store import LONG_TOOLS
     now = now or time.time()
     procs = store.procs
     rows = []
@@ -77,7 +76,7 @@ def build(store, now=None):
         counts["tools"] += len(tools)
         rows.extend(tools)
 
-        for a in sorted(s.agents.values(), key=lambda a: a.t.started or 0):
+        for a in sorted(list(s.agents.values()), key=lambda a: a.t.started or 0):
             if a.finished:
                 continue
             counts["agents"] += 1
@@ -90,13 +89,13 @@ def build(store, now=None):
             counts["tools"] += len(sub)
             rows.extend(sub)
 
-        for task in sorted(s.t.bg_tasks.values(), key=lambda b: b.started or 0):
+        for task in sorted(list(s.t.bg_tasks.values()), key=lambda b: b.started or 0):
             if task.running:
                 counts["bg"] += 1
                 rows.append(Row(1, "⧗", "bg %s  %s" % (task.tool, task.summary or task.id), "accent", "bg", (s, task),
                                 "running " + fdur(now - task.started) if task.started else "running", "ok"))
             elif task.ended and now - task.ended < RECENT_DONE_S:
-                ok = task.status == "completed"
+                ok = task.status in ("completed", "stopped", "killed")   # stopped on purpose is not a failure
                 rows.append(Row(1, "✓" if ok else "✗", "bg %s  %s" % (task.tool, task.result or task.summary or task.id),
                                 "dim" if ok else "crit", "bg", (s, task),
                                 "%s %s ago" % (task.status, fdur(now - task.ended)), "dim" if ok else "crit"))

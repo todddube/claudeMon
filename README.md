@@ -61,9 +61,15 @@ or run `claudemon install`.
 ![Limit page without the tap](screenshots/tap-needed.png)
 
 - Your status line keeps working: the tap passes its input straight through to your original command.
-- `settings.json` is backed up to `~/.claude/claudemon/` before every change.
-- `claudemon uninstall` (or `U` `U` on Settings) restores it exactly.
-- If you move this folder, or the Python it was installed with disappears, the next launch re-points the installed tap automatically.
+- The tap is copied to `~/.claude/claudemon/tap.py` and `settings.json` points there, so moving or
+  deleting this folder never breaks your status line. Each launch refreshes the copy.
+- `settings.json` is backed up to `~/.claude/claudemon/` before every change (the last 10 are kept).
+  A symlinked `settings.json` (dotfile managers) stays a symlink, and its permissions are kept.
+- `claudemon uninstall` (or `U` `U` on Settings) restores your original status line and removes the hook.
+- If the Python it was installed with disappears, the next launch re-points the tap at a working one.
+- To remove it by hand (for example after deleting this folder): in `~/.claude/settings.json`, set
+  `statusLine.command` back to the quoted command after `--` (or delete `statusLine` if there is none),
+  and delete the Notification hook whose command ends in `# claudemon`.
 
 The manual explains it in full (`m`, chapter "The tap"):
 
@@ -211,17 +217,21 @@ See [SPEC.md](SPEC.md) for the analysis of Himamushi, the data sources and the d
 ## Privacy
 
 claudeMon reads `~/.claude` (transcripts, the live session registry, jobs, scheduled tasks) and the
-process list, and writes only to `~/.claude/claudemon/`. Nothing leaves your machine. The
+process list, and writes to `~/.claude/claudemon/` (created private to your user). Installing the
+tap also edits `~/.claude/settings.json`, with a backup first. Nothing leaves your machine. The
 screenshots above use synthetic demo data, never real sessions.
 
 ## Tests
 
 ```sh
-python3 -m unittest discover -s tests -v
+python3 -m unittest -v
 ```
 
-Standard library only. They render every page (Unicode and ASCII, plus a tiny terminal) from the demo
-data, round-trip the tap install and uninstall, and check the CLI on an empty home.
+Standard library only, about 15 seconds. `test_smoke.py` renders every page (Unicode and ASCII, plus a tiny
+terminal) from the demo data and checks the CLI on an empty home. `test_install.py` round-trips the tap
+install against throwaway config directories (odd `settings.json` shapes, symlinks, a checkout path with a
+space, older installs). `test_units.py` feeds malformed and real-shaped records to the parsers, the limit
+forecast, the process classifier and the TUI's key handling. CI runs them on macOS with Python 3.9 and 3.13.
 
 ## Regenerating the screenshots
 

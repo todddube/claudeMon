@@ -37,8 +37,11 @@ TOPICS = [
         "⟲ re-read loops). Sessions that need you sort to the top.",
         "claudeMon resizes the window to fit the session list, and puts the old size back when you "
         "press z again or quit. Terminal and iTerm honour this; in other terminals, tmux or a "
-        "full-screen window the size stays as it is. In mini, ⏎ opens Inspect and a page key opens "
-        "that page, both in the full view. `claudemon --mini` starts in it, and it is remembered.",
+        "full-screen window the size stays as it is. It resizes the whole window, so give it a window "
+        "of its own (`claudemon --window --mini`) rather than one tab of several, or set "
+        "CLAUDEMON_RESIZE=0 to turn resizing off. In mini, ⏎ opens "
+        "Inspect, a page key opens that page, and m or ? open the manual or help, all in the full "
+        "view. `claudemon --mini` starts in it, and it is remembered.",
         "# Two things that need the tap",
         "Most pages work out of the box. The Session limit and Weekly limit pages, the per-session "
         "cost, the exact context window size and reliable ‘Needs you’ alerts all come from the tap. "

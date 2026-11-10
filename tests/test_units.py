@@ -334,6 +334,28 @@ class TuiInput(unittest.TestCase):
             self.assertEqual(out[3:8], ["'²' 0", "'٣' 0", "'0' 9", "'9' 8", "'1' 0"])
             self.assertEqual(out[8], "4 False")
 
+    def test_manual_and_help_leave_mini(self):
+        with tempfile.TemporaryDirectory() as home:
+            code = (
+                "import tui, store\n"
+                "st = store.Store(); st.indexed = True\n"
+                "for k in ('m', '?'):\n"
+                "    app = tui.App(g.FakeWin(12, 74), st, {'mini': True, 'tap_prompt_seen': True})\n"
+                "    app.tick(force=True); app.on_key(k); app.draw()\n"
+                "    print(app.mini, app.modal)\n")
+            self.assertEqual(self.run_py(code, home).splitlines(), ["False manual", "False help"])
+
+    def test_install_prompt_ignores_keys_while_the_window_is_too_small(self):
+        with tempfile.TemporaryDirectory() as home:
+            code = (
+                "import tui, store, install\n"
+                "st = store.Store(); st.indexed = True\n"
+                "app = tui.App(g.FakeWin(12, 60), st, {'tap_prompt_seen': True})\n"
+                "app.tick(force=True); app.modal = 'prompt'; app.draw()\n"
+                "print(app.on_key('\\n'), app.modal, install.installed())\n"
+                "print(app.on_key('q'))\n")
+            self.assertEqual(self.run_py(code, home).splitlines(), ["True prompt False", "False"])
+
     def test_alt_key_is_not_a_quit_and_esc_is(self):
         with tempfile.TemporaryDirectory() as home:
             code = (

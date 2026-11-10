@@ -86,6 +86,8 @@ with their forecast, the overall burn and cache, and one line per live session w
 and effort, context, tokens per minute and the tool it is running. The window grows and shrinks as
 sessions come and go. Press `z` again, `⏎` (Inspect) or a page key and it returns to its full size.
 Resizing works in Terminal and iTerm; in other terminals, tmux or full screen the size is left alone.
+The whole window is resized, so run it in a window of its own (`--window --mini`) rather than as one tab of
+several. `CLAUDEMON_RESIZE=0` turns resizing off; `CLAUDEMON_RESIZE=1` forces it in another terminal.
 
 ![Mini view](screenshots/mini.png)
 

@@ -489,8 +489,10 @@ class App:
             self.draw_mini(h, w)
             scr.win.refresh()
             return
-        if h < 16 or w < 70:
+        if self.too_small():
             scr.put(0, 0, "claudeMon needs at least 70×16 (now %d×%d)" % (w, h), self.T("warn"))
+            if self.modal == "prompt":
+                scr.put(1, 0, "⚡ enlarge the window to answer the tap prompt (q quits)", self.T("dim"))
             scr.win.refresh()
             return
         self.draw_header(w)
@@ -650,6 +652,12 @@ class App:
         elif k is not None and len(k) == 1 and (k in DIGITS or k == "s"):   # a page key opens that page in the full view
             self.page = self.idx("Settings") if k == "s" else self.digit_page(k)
             self.set_mini(False)
+        elif k in ("m", "M", "?"):                 # the manual and help need the full view
+            self.set_mini(False)
+            if k == "?":
+                self.modal = "help"
+            else:
+                self.man_i, self.man_scroll, self.modal = 0, 0, "manual"
         elif k == "t":
             i = (THEME_ORDER.index(self.scr.theme_name) + 1) % len(THEME_ORDER)
             self.scr.set_theme(THEME_ORDER[i])
@@ -818,7 +826,13 @@ class App:
             self.flash = "install failed: %s" % e
         self.tap_ok = install.installed()
 
+    def too_small(self):
+        h, w = self.scr.size
+        return h < 16 or w < 70
+
     def key_prompt(self, key, k):
+        if self.too_small():                      # the prompt is not on screen, so no key may answer it
+            return k not in ("q", "Q", "\x1b")
         if k in ("i", "I", "\n", "\r") or key == curses.KEY_ENTER:
             self.do_install()
         else:

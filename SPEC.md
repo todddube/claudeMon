@@ -97,7 +97,7 @@ A terminal UI in the style of btop, syswatch and netwatch: Python stdlib only (`
 - **Manual** (`m`) is built in: one chapter per page, plus the tap, the Claude Code tools and the data sources. It opens on the page you are viewing.
 - **The tap is highlighted everywhere it matters:** a yellow `⚡ tap off: press I` chip in the header and footer, `⚡ install tap` in the sidebar, a full callout on the limit pages, and a one-time prompt on first launch (install now, or later).
 - **Keys:** `1-0` page, `←→`/Tab page, `↑↓`/jk select, `⏎` inspect, `g` range (5m/15m/1h/6h/24h), `o` overall, `e` model·effort, `a` include finished sessions, `t` theme, `b` graph style (blocks, braille, dots, line, ascii), `u` update interval, `r` refresh, `m` manual, `?` help, `q` quit; `I I` installs the tap from any page, `U U` removes it on Settings (both ask for a second press).
-- **State** is kept in `~/.claude/claudemon/` (config, limits log, status snapshots, settings backups). claudeMon never writes inside Claude Code's own files.
+- **State** is kept in `~/.claude/claudemon/` (config, limits log, status snapshots, settings backups, the installed `tap.py`). The only Claude Code file claudeMon writes is `settings.json`, and only to install, repair or remove the tap, with a backup first.
 
 ### Module map
 

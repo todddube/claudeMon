@@ -5,29 +5,71 @@ show MCP servers apart from shell commands the agent is running right now.
 """
 
 import os
+import re
 import subprocess
 
 DESKTOP_MARK = "/Claude.app/"
+SHELLS = {"zsh", "bash", "sh", "fish", "dash", "ksh"}
+LAUNCHERS = {"node", "npx", "npm", "pnpm", "yarn", "bun", "bunx", "deno", "uv", "uvx", "pipx", "docker", "python", "ruby",
+             "claude"}                                  # claude mcp serve
+KNOWN_EXES = SHELLS | {"claude", "node", "caffeinate"}
+# "mcp" as a whole part of a name or path: mcp-server-x, @scope/mcp, .bin/mcp, x_mcp, /mcp/
+MCP_RE = re.compile(r"(?:^|[/@_.-])mcp(?:$|[/@_.-])|modelcontextprotocol")
+COMM_MAX = 15            # macOS ps cuts comm to 16 characters unless it is the last column
+
+
+def exe_from(comm, args):
+    """The executable path. When ps truncated comm, recover the full path from args
+    (it can contain spaces: "Application Support"), matching known executable names."""
+    if len(comm) < COMM_MAX or not args.startswith(comm):
+        return comm
+    # the path ends before the first " -" (an option), so a later argument is never taken for it
+    m = re.match(r"(\S(?:(?! -).)*?/(?:%s))(?=\s|$)" % "|".join(sorted(map(re.escape, KNOWN_EXES))), args)
+    return m.group(1) if m else comm
+
+
+def _launcher(base):
+    base = base.lower()
+    return base in LAUNCHERS or re.match(r"(python|node)[\d.]*$", base) is not None
+
+
+def mcp_argv(argv):
+    """True when an argv runs an MCP server: the program itself, or the first
+    script/package a launcher (node, npx, uvx, python...) runs, is named for MCP."""
+    if not argv:
+        return False
+    base = os.path.basename(argv[0])
+    if MCP_RE.search(base.lower()):
+        return True
+    if not _launcher(base):
+        return False
+    operands = [a for a in argv[1:] if not a.startswith("-")][:2]
+    return any(MCP_RE.search(a.lower()) for a in operands)
 
 
 class Proc:
-    __slots__ = ("pid", "ppid", "elapsed", "cpu", "rss", "comm", "args", "children")
+    __slots__ = ("pid", "ppid", "elapsed", "cpu", "rss", "comm", "args", "children", "exe")
 
     def __init__(self, pid, ppid, elapsed, cpu, rss, comm, args):
         self.pid, self.ppid, self.elapsed = pid, ppid, elapsed
         self.cpu, self.rss, self.comm, self.args = cpu, rss, comm, args
+        self.exe = exe_from(comm, args)
         self.children = []
 
     @property
     def kind(self):
-        a = self.args
-        low = a.lower()
-        if " mcp" in low or "mcp-server" in low or "modelcontextprotocol" in low or low.endswith("mcp"):
-            return "mcp"
-        if os.path.basename(self.comm) in ("caffeinate",):
+        base = os.path.basename(self.exe)
+        if base == "caffeinate":
             return "keep-awake"
-        if os.path.basename(self.comm) in ("zsh", "bash", "sh", "fish"):
+        if base in SHELLS:
+            # a shell wrapping an MCP launcher (sh -c "npx mcp-server-x") is that server;
+            # Claude Code's own wrapper (zsh -c "source ... && eval '<cmd>'") is a shell
+            rest = self.args.split(" -c ", 1)
+            if len(rest) == 2 and mcp_argv(rest[1].strip("'\" ").split()):
+                return "mcp"
             return "shell"
+        if mcp_argv([self.exe] + self.args[len(self.exe):].split() if self.args.startswith(self.exe) else self.args.split()):
+            return "mcp"
         return "process"
 
     @property
@@ -88,7 +130,7 @@ def snapshot():
 
 
 def is_claude_cli(p):
-    base = os.path.basename(p.comm)
+    base = os.path.basename(p.exe)
     if base == "claude":
         return True
     return base == "node" and ("claude-code" in p.args or "/bin/claude" in p.args)

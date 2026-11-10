@@ -52,12 +52,14 @@ TOPICS = [
         "rate_limits (5-hour and 7-day used % and reset time), the context window size, the session "
         "cost and the effort level.",
         "The tap is a small script (tap.py) that sits in front of your status-line command. "
-        "It saves a copy of that JSON for claudeMon, then runs your original command on the same input, "
-        "so your status line looks exactly the same.",
+        "It saves a copy of that JSON for claudeMon, then hands over to your original command on the same "
+        "input, so your status line, its exit code and its timing are exactly the same.",
         "# What installing changes",
-        "- statusLine.command becomes: python3 …/tap.py statusline -- '<your original command>'",
-        "- A Notification hook is added: python3 …/tap.py hook Notification  # claudemon",
-        "- settings.json is backed up to ~/.claude/claudemon/settings.<time>.bak.json before every change",
+        "- tap.py is copied to ~/.claude/claudemon/tap.py, so moving or deleting this folder is safe",
+        "- statusLine.command becomes: python3 ~/.claude/claudemon/tap.py statusline -- '<your original command>' # claudemon",
+        "- A Notification hook is added: python3 ~/.claude/claudemon/tap.py hook Notification # claudemon",
+        "- settings.json is backed up to ~/.claude/claudemon/settings.<time>.bak.json before every change "
+        "(the last 10 are kept; a symlinked settings.json and its permissions are preserved)",
         "- Your original status line is also saved to ~/.claude/claudemon/statusline.backup.json",
         "# What it records",
         "- ~/.claude/claudemon/status/<session>.json: the latest status-line input per session",

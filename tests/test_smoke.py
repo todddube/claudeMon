@@ -77,7 +77,7 @@ class Pages(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.home = cls.tmp.name
         live = subprocess.Popen(["sleep", "300"])         # a live pid for the demo sessions
-        cls.addClassCleanup(live.kill)
+        cls.addClassCleanup(lambda: (live.kill(), live.wait()))
         r = run("utils/make_demo.py", cls.home, "--pid", str(live.pid))
         assert r.returncode == 0, r.stderr
 

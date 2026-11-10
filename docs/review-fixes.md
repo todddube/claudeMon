@@ -12,7 +12,7 @@ Status key: **Fixed**, **Not a bug** (verified, no change), **Deferred** (delibe
 
 | Check | Result |
 |---|---|
-| `python3 -m unittest` (Python 3.9.6 and 3.13) | 71 tests pass (16 before). Plain discovery used to find 0 tests; `tests/__init__.py` fixes that. |
+| `python3 -m unittest` (Python 3.9.6 and 3.13) | 73 tests pass (16 before). Plain discovery used to find 0 tests; `tests/__init__.py` fixes that. |
 | New tests run against the original code (`0da058b`) | 39 of 47 fail, so they really cover the bugs. The other 8 guard behaviour that already worked (passthrough, exit codes, `parse_etime`). |
 | Real data, sandbox config directory (transcripts and registry symlinked read-only, `settings.json` copied) | `snapshot` and `loops` work. Weekly burn rate 88 → 59 %/day, the correct figure for 38 → 40 % in about 50 min. Background tasks shown as running 21 → 3, with 20 shown as stopped. |
 | Real process table | MCP servers 16 → 28: all 28 real ones found, and the two false positives (`zsh -c …`, `python -c …`) are gone. Desktop-hosted `claude` CLIs are now recognised, and the `disclaimer` wrapper is not mistaken for one. |
@@ -100,6 +100,9 @@ After that the repo can be moved or deleted without breaking your status line.
 | F1 M10: the Session limit page waits for data forever on accounts that report only the weekly limit | **Fixed** | With the tap working and the other window reporting, the page, sidebar and mini view say "not reported" and explain why. |
 | F1 M11: the first-run text says "Needs you" needs the tap | **Fixed** (text) | It now says limits, cost and context size need the tap, and that without it "Needs you" is a best guess. `waitingFor` is not shown yet (Deferred, cosmetic). |
 | F2 C14: `--size` is interpolated into AppleScript unescaped | **Fixed** | `launch.parse_size()` requires `\d{2,4}x\d{1,4}`; the CLI rejects anything else. |
+| Follow-up: `m` and `?` did nothing in the mini view | **Fixed** | They switch to the full view and open the manual or help. |
+| Follow-up: below 70×16 the first-run prompt is not drawn, but ⏎ still installs the tap | **Fixed** | While the window is too small the prompt ignores every key except q/Esc (quit), and the screen says to enlarge the window to answer it. |
+| Follow-up: mini resizes the whole window, tabs included | **Fixed** (docs) | README and manual suggest `--window --mini` and document `CLAUDEMON_RESIZE`. |
 | F2 C14: docs claim claudeMon writes only to `~/.claude/claudemon/` | **Fixed** | README, SPEC and the manual describe the `settings.json` edits, the installed copy, backups and permissions. |
 
 ## Tests and tooling
@@ -127,7 +130,7 @@ An independent `/code-review high` of the full diff raised 10 findings. Each one
 | `config.save()` left a temp file behind when a value could not be serialised | Fixed | It serialises before creating the file, and removes the temp file on any error. |
 | The Settings page showed "page error" when `settings.json` had an unexpected shape | Fixed | It uses `install.safe_status()` and shows the reason in red in the Data sources panel. |
 
-The test suite is now 71 tests and passes on Python 3.9 and 3.13.
+The test suite is now 73 tests and passes on Python 3.9 and 3.13.
 
 ## Not changed, on purpose
 

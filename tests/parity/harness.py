@@ -70,9 +70,13 @@ MASKS = [
     ("shared state", "a fresh copy of each fixture home per side and scenario"),
 ]
 
-# Declared deltas: output keys (scenario/key, fnmatch-style) allowed to differ, with the reason.
-# Empty until a phase lands one of the plan's declared deltas.
-DELTAS = {}
+# Declared deltas: output keys (scenario/key, fnmatch-style) allowed to differ, as
+# (reason, regex, replacement). The rewrite is applied to the baseline's output only, and the key is
+# allowed just when the rewritten baseline equals the candidate, so nothing else can differ unnoticed.
+DELTAS = {
+    "window/*": ("--window relaunches through self_command() and no longer does `cd ROOT`",
+                 r"cd <ROOT> && ", ""),
+}
 
 
 class HarnessError(Exception):
@@ -512,9 +516,9 @@ def run_scenario(side, scen):
 
 def declared(key):
     import fnmatch
-    for pat, why in DELTAS.items():
+    for pat, (why, rx, repl) in DELTAS.items():
         if fnmatch.fnmatchcase(key, pat):
-            return why
+            return why, rx, repl
     return None
 
 
@@ -527,9 +531,9 @@ def compare(a, b, names, max_lines):
             if va == vb:
                 continue
             key = "%s/%s" % (scen, k)
-            why = declared(key)
-            if why:
-                allowed.append((key, why))
+            delta = declared(key)
+            if delta and re.sub(delta[1], delta[2], va) == vb:
+                allowed.append((key, delta[0]))
                 continue
             d = list(difflib.unified_diff(va.splitlines(), vb.splitlines(), "baseline/" + key, "candidate/" + key,
                                           lineterm="", n=2))

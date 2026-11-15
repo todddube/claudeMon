@@ -54,7 +54,6 @@ def _tool_rows(t, depth, now, long_tools):
 
 def build(store, now=None):
     now = now or time.time()
-    procs = store.procs
     rows = []
     counts = dict(sessions=0, tools=0, agents=0, bg=0, procs=0, queued=0)
     claimed = set()
@@ -67,7 +66,7 @@ def build(store, now=None):
         counts["sessions"] += 1
         state = s.state(now)
         pid = (s.live or {}).get("pid")
-        p = procs.get(pid)
+        p = store.proc(pid)
         claimed.add(pid)
         mem = "  %s  cpu %.0f%%" % (fmem(p.rss), p.cpu) if p else ""
         rows.append(Row(0, "◆", "%s   %s · %s%s" % (s.name, short_model(s.model), s.effort or "?", mem),
@@ -106,7 +105,7 @@ def build(store, now=None):
                 if c.kind == "mcp":
                     mcp.append(c)
                 elif c.kind in ("shell", "process") and "ps -axo" not in c.args:
-                    if c.ppid != p.pid and procs.get(c.ppid) and procs.get(c.ppid).kind == "mcp":
+                    if c.ppid != p.pid and store.proc(c.ppid) and store.proc(c.ppid).kind == "mcp":
                         continue                  # a helper of an MCP server
                     counts["procs"] += 1
                     rows.append(Row(1, "▸", "pid %d  %s" % (c.pid, c.label), "fg", "proc", c,
@@ -120,8 +119,8 @@ def build(store, now=None):
             rows.append(Row(1, "✉", "queued: %s" % " ".join(text.split()), "warn", "queued", (s, ts, text),
                             fdur(now - ts) if ts else ""))
 
-    others = [p for p in procs.clis() if p.pid not in claimed]
-    desk = procs.desktop()
+    others = [p for p in store.cli_procs() if p.pid not in claimed]
+    desk = store.desktop_procs()
     if others or desk[0]:
         rows.append(Row(0, "", "Other Claude processes", "title", "header"))
     for p in others:

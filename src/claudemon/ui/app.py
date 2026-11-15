@@ -223,7 +223,7 @@ class App:
         forecasts = {}
         for k in WINDOWS:
             try:
-                forecasts[k] = self.store.limits.forecast(k, self.store.tokens_between)
+                forecasts[k] = self.store.forecast(k)
             except Exception:           # e.g. the indexer thread changed a dict mid-read: keep the last one
                 if k in self.forecasts:
                     forecasts[k] = self.forecasts[k]
@@ -489,8 +489,8 @@ class App:
                 text, role = STATE_BADGE[state]
                 sym, word = text.split(" ", 1)
                 x += scr.put(0, x, "  %s %d %s" % (sym, counts[state], word.lower()), self.T(role), bg, curses.A_BOLD if state == NEEDS_YOU else 0)
-        if not self.store.indexed:
-            done, total = self.store.index_progress
+        indexed, (done, total) = self.store.index_status()
+        if not indexed:
             x += scr.put(0, x, "  indexing %d/%d…" % (done, total), self.T("info"), bg)
         if not self.tap_ok:
             x += 2
@@ -1832,8 +1832,8 @@ class App:
             ("Live registry", "~/.claude/sessions", self.T("ok")),
             ("Status-line tap", "installed" if st["statusline"] else "not installed (press I)", self.T("ok") if st["statusline"] else self.T("warn")),
             ("Notification hook", "installed" if st["hook"] else "not installed (press I)", self.T("ok") if st["hook"] else self.T("warn")),
-            ("Limit samples", str(sum(len(v) for v in self.store.limits.obs.values())), self.T("fg")),
-            ("Sessions indexed", str(len(self.store.sessions)), self.T("fg")),
+            ("Limit samples", str(self.store.limit_samples()), self.T("fg")),
+            ("Sessions indexed", str(self.store.session_count()), self.T("fg")),
             ("Update every", "%d s  (u)" % self.interval, self.T("fg")),
             ("Graph range", "%s  (g)" % SPANS[self.span_i][1], self.T("fg")),
         ]

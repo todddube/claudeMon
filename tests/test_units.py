@@ -271,6 +271,24 @@ class StoreTests(unittest.TestCase):
                                     "print(s.indexed, len(s.sessions), 'ok' in s.sessions['s1'].t.calls)")
             self.assertEqual(out, "True 2 True")
 
+    def test_query_methods_match_the_attributes_they_wrap(self):
+        with tempfile.TemporaryDirectory() as home:
+            home = Path(home)
+            proj = home / "projects" / "p"
+            proj.mkdir(parents=True)
+            (proj / "s1.jsonl").write_text(jl(asst("ok")))
+            (home / "claudemon").mkdir()
+            (home / "claudemon" / "limits.jsonl").write_text(jl({"ts": time.time() - 60, "seven_day": {"pct": 5}}, {"ts": time.time() - 30, "five_hour": {"pct": 9}}))
+            code = ("import os\nfrom claudemon.sources import store\ns = store.Store()\n"
+                    "print(s.index_status())\ns.index()\ns.refresh()\n"
+                    "print(s.index_status(), s.session_count(), s.limit_samples())\n"
+                    "f = s.forecast('seven_day'); g = s.limits.forecast('seven_day', s.tokens_between)\n"
+                    "print(f.pct == g.pct, f.points == g.points)\n"
+                    "print(s.proc(os.getpid()) is s.procs.get(os.getpid()), s.proc('x'), s.cli_procs() == s.procs.clis(),\n"
+                    "      s.desktop_procs() == s.procs.desktop())")
+            out = self.run_py(home, code).splitlines()
+            self.assertEqual(out, ["(False, (0, 0))", "(True, (1, 1)) 1 2", "True True", "True None True True"])
+
     def test_pid_reuse_is_not_a_live_session(self):
         with tempfile.TemporaryDirectory() as home:
             home = Path(home)

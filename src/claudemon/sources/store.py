@@ -423,3 +423,32 @@ class Store:
         for _, c, _ in self.calls(since, sessions):
             u.add(c.usage)
         return u
+
+    # The rest of what the UI reads, so pages never reach into the store's attributes.
+    def forecast(self, key):
+        """The limits.Forecast for one window (a WINDOWS key), checked against local usage."""
+        return self.limits.forecast(key, self.tokens_between)
+
+    def limit_samples(self):
+        """How many limit observations the log holds, over every window."""
+        return sum(len(v) for v in self.limits.obs.values())
+
+    def session_count(self):
+        """How many sessions are indexed, live or not."""
+        return len(self.sessions)
+
+    def index_status(self):
+        """(indexed, (done, total)): whether the first index finished, and how far it got."""
+        return self.indexed, self.index_progress
+
+    def proc(self, pid):
+        """The procs.Proc for a pid in the last process table, or None."""
+        return self.procs.get(pid)
+
+    def cli_procs(self):
+        """Every Claude Code CLI process in the last process table, by pid."""
+        return self.procs.clis()
+
+    def desktop_procs(self):
+        """(main process or None, helper count, total RSS kB, total CPU %) for Claude Desktop."""
+        return self.procs.desktop()

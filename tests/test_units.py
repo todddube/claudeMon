@@ -289,6 +289,22 @@ class StoreTests(unittest.TestCase):
             out = self.run_py(home, code).splitlines()
             self.assertEqual(out, ["(False, (0, 0))", "(True, (1, 1)) 1 2", "True True", "True None True True"])
 
+    def test_sources_registry_builds_and_refreshes_in_order(self):
+        with tempfile.TemporaryDirectory() as home:
+            code = ("from claudemon import sources\nfrom claudemon.sources import store\n"
+                    "print([n for n, _, _ in sources.SOURCES])\n"
+                    "log = []\n"
+                    "class Probe:\n"
+                    "    def __init__(self, stage): self.stage = stage\n"
+                    "    def refresh(self):\n"
+                    "        log.append((self.stage, len(s.sessions)))\n"
+                    "        if self.stage == 'first': raise RuntimeError('a failing source is swallowed')\n"
+                    "sources.SOURCES += [('early', lambda: Probe('first'), 'first'), ('late', lambda: Probe('last'), 'last')]\n"
+                    "s = store.Store()\ns.refresh()\n"
+                    "print(type(s.procs).__name__, type(s.limits).__name__, s.early.stage, log)\n")
+            out = self.run_py(home, code).splitlines()
+            self.assertEqual(out, ["['procs', 'limits']", "Processes LimitLog first [('first', 0), ('last', 0)]"])
+
     def test_pid_reuse_is_not_a_live_session(self):
         with tempfile.TemporaryDirectory() as home:
             home = Path(home)

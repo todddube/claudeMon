@@ -16,10 +16,9 @@ import re
 import threading
 import time
 
-from claudemon.sources.limits import LimitLog
+from claudemon.sources import SOURCES
 from claudemon.sources.limits import compact as compact_limits
 from claudemon.core.paths import JOBS_DIR, PROJECTS_DIR, SCHEDULED_DIR, SESSIONS_DIR, STATUS_DIR
-from claudemon.sources.procs import Processes
 from claudemon.sources.transcript import Transcript, Usage
 
 HISTORY_S = 8 * 86400           # transcripts this recent feed the history pages
@@ -210,8 +209,8 @@ class Session:
 class Store:
     def __init__(self):
         self.sessions = {}
-        self.limits = LimitLog()
-        self.procs = Processes()
+        for name, factory, _ in SOURCES:      # store.procs, store.limits, ...
+            setattr(self, name, factory())
         self.lock = threading.RLock()
         self.indexed = False
         self.index_progress = (0, 0)
@@ -290,7 +289,7 @@ class Store:
 
     def refresh(self):
         now = time.time()
-        self.procs.refresh()                  # first: the registry check below uses it
+        self._refresh_sources("first")        # the process table: the registry check below uses it
         live = {}
         for path in glob.glob(str(SESSIONS_DIR / "*.json")):
             entry = read_json(path)
@@ -326,12 +325,17 @@ class Store:
                     s.hook = hk
             except Exception:                 # one bad session must not take the others down
                 pass
-        try:
-            self.limits.refresh()
-        except Exception:
-            pass
+        self._refresh_sources("last")
         if any(self.limits.obs.values()):
             self.tap_seen = True
+
+    def _refresh_sources(self, stage):
+        for name, _, when in SOURCES:
+            if when == stage:
+                try:
+                    getattr(self, name).refresh()
+                except Exception:             # a data source must never take the store down
+                    pass
 
     # ── queries ────────────────────────────────────────────────────────────
     def jobs(self):

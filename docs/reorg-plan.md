@@ -121,6 +121,9 @@ Each page is `Page(id, title, key, render, side, on_key, tick, manual_topic)`.
   of the App, so no two later units edit the same file. Every Store read the pages need is a Store
   method (`forecast`, `limit_samples`, `session_count`, `index_status`, `proc`, `cli_procs`,
   `desktop_procs`, plus the existing queries).
+- `SOURCES` entries are `(name, factory, stage)`: a single list order cannot put `procs` before the
+  liveness check and `limits` after the transcripts, so `stage` (`"first"` or `"last"`) says when
+  `Store.refresh` refreshes each one, in list order within the stage, each failure swallowed.
 
 ### Cost of extending
 

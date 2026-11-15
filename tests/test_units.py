@@ -221,6 +221,26 @@ class Procs(unittest.TestCase):
         self.assertFalse(procs.is_claude_cli(wrapper))
         self.assertEqual(self.proc("/opt/homebrew/bi", "/opt/homebrew/bin/zsh -l").kind, "shell")
 
+    def test_linux_comm_with_spaces(self):
+        lines = ["  67336   67140       00:00  0.0  2060 Web Content     sh -c printf x; sleep 30",
+                 "    123       1    01:02:03  0.0  2452 tmux: server    tmux new -s work",
+                 "      2       1  4-14:22:19  0.0  2528 init-systemd(Ub /init",
+                 "      1       0  4-14:22:20  0.0  6528 systemd         /usr/lib/systemd/systemd --system",
+                 "    317     294  4-14:22:18  0.0  5784 uv              /home/joe/.local/bin/uv run -q site/app.py"]
+        got = [procs.split_line(line, linux=True)[5:] for line in lines]
+        self.assertEqual(got, [["Web Content", "sh -c printf x; sleep 30"], ["tmux: server", "tmux new -s work"],
+                               ["init-systemd(Ub", "/init"], ["systemd", "/usr/lib/systemd/systemd --system"],
+                               ["uv", "/home/joe/.local/bin/uv run -q site/app.py"]])
+        # a line without the padded column (no args, or an overlong name) splits as before
+        for line in ("   10     2  00:01  0.0  0 kthreadd", "   11 2 00:01 0.0 0 kworker/u16:2-events_unbound [kworker]"):
+            self.assertEqual(procs.split_line(line, linux=True), line.split(None, 6))
+
+    def test_macos_lines_split_as_before(self):
+        for line in ("  807     1 87-16:03:14   0.0   1888 /bin/bash        /bin/bash /Library/Application Support/x.sh",
+                  "13936 82678    01:51:08   0.0  34464 /Applications/Cl /Applications/Claude.app/Contents/MacOS/Claude",
+                  "    1     0 87-16:04:20   0.3  24080 /sbin/launchd    /sbin/launchd"):
+            self.assertEqual(procs.split_line(line), line.split(None, 6))
+
     def test_parse_etime(self):
         self.assertEqual(procs.parse_etime("1-02:03:04"), 86400 + 7384)
         self.assertEqual(procs.parse_etime("05:06"), 306)

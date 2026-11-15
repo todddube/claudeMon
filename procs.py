@@ -7,6 +7,7 @@ show MCP servers apart from shell commands the agent is running right now.
 import os
 import re
 import subprocess
+import sys
 
 DESKTOP_MARK = "/Claude.app/"
 SHELLS = {"zsh", "bash", "sh", "fish", "dash", "ksh"}
@@ -16,6 +17,7 @@ KNOWN_EXES = SHELLS | {"claude", "node", "caffeinate"}
 # "mcp" as a whole part of a name or path: mcp-server-x, @scope/mcp, .bin/mcp, x_mcp, /mcp/
 MCP_RE = re.compile(r"(?:^|[/@_.-])mcp(?:$|[/@_.-])|modelcontextprotocol")
 COMM_MAX = 15            # macOS ps cuts comm to 16 characters unless it is the last column
+LINUX_COMM_W = 15        # procps: comm is the bare name (at most 15 characters, spaces allowed), padded to 15
 
 
 def exe_from(comm, args):
@@ -104,6 +106,20 @@ def parse_etime(text):
     return days * 86400 + h * 3600 + m * 60 + s
 
 
+def split_line(line, linux=False):
+    """A ps line -> [pid, ppid, etime, cpu, rss, comm] plus args when there are any.
+
+    On Linux comm can contain spaces ("tmux: server", "Web Content"), so a plain split
+    would shift args; procps pads comm to its 15-character column, so cut it there."""
+    if linux:
+        parts = line.split(None, 5)
+        rest = parts[5] if len(parts) == 6 else ""
+        if len(rest) > LINUX_COMM_W and rest[LINUX_COMM_W] == " ":
+            comm, args = rest[:LINUX_COMM_W].rstrip(), rest[LINUX_COMM_W:].lstrip()
+            return parts[:5] + [comm] + ([args] if args else [])
+    return line.split(None, 6)
+
+
 def snapshot():
     try:
         out = subprocess.run(["ps", "-axo", "pid=,ppid=,etime=,%cpu=,rss=,comm=,args="],
@@ -111,8 +127,9 @@ def snapshot():
     except (OSError, subprocess.SubprocessError):
         return {}
     procs = {}
+    linux = sys.platform.startswith("linux")
     for line in out.splitlines():
-        parts = line.split(None, 6)
+        parts = split_line(line, linux)
         if len(parts) < 6:
             continue
         try:

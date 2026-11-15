@@ -5,6 +5,7 @@ on:
   pull_request:
 
 jobs:
+  # The required checks "test (3.9)" and "test (3.13)": keep this job's name and matrix.
   test:
     runs-on: macos-latest
     strategy:
@@ -13,10 +14,66 @@ jobs:
         python: ["3.9", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Compile
+        run: uv run python -m compileall -q .
+      - name: Tests
+        run: uv run pytest -q
+
+  # The same suite on Linux (ubuntu-latest has GNU ps, a /usr/bin/python3 and no Command Line Tools).
+  test-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile
+        run: uv run python -m compileall -q .
+      - name: Tests
+        run: uv run pytest -q
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: ruff check
+        run: uv run ruff check
+
+  # The clone route: stock Python 3.9, nothing installed, standard-library unittest.
+  clone-route:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
       - name: Compile
         run: python -m compileall -q .
       - name: Tests
         run: python -m unittest -v
+
+  # Differential parity against the pinned baseline (tests/parity/BASELINE); needs full history.
+  parity:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Parity harness
+        run: python tests/parity/harness.py --python "$(command -v python)"

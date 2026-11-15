@@ -72,7 +72,7 @@ def key_manual(ctx, key, k):
     return True
 
 
-def manual_lines(ctx, topic, width):
+def manual_lines(topic, width):
     out = []
     kw = min(28, max([len(e[2:].partition(" | ")[0]) for e in topic["body"] if e.startswith("> ")] + [6]) + 2)
     for e in topic["body"]:
@@ -126,7 +126,7 @@ def draw_manual(ctx, h, w):
     for row in range(y0 + 1, y0 + bh - 1):
         scr.put(row, x0 + lw, "│", ctx.T("border"), ctx.T("hl_bg"))
     cx, cw = x0 + lw + 2, bw - lw - 4
-    lines = manual_lines(ctx, manual.TOPICS[ctx.man_i], cw)
+    lines = manual_lines(manual.TOPICS[ctx.man_i], cw)
     inner = bh - 4
     ctx.man_scroll = max(0, min(ctx.man_scroll, max(0, len(lines) - inner)))
     for i, line in enumerate(lines[ctx.man_scroll:ctx.man_scroll + inner]):

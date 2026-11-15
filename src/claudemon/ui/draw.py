@@ -5,7 +5,7 @@ import curses
 import os
 import unicodedata
 
-from themes import THEMES
+from claudemon.ui.themes import THEMES
 
 BRAILLE = 0x2800
 # dot bits by [column][row-from-top]

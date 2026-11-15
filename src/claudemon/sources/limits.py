@@ -12,7 +12,7 @@ import os
 import time
 from datetime import datetime
 
-from paths import LIMITS_LOG
+from claudemon.core.paths import LIMITS_LOG
 
 WINDOWS = {
     "five_hour": dict(label="Session", span=5 * 3600, recent=3600, slice=900, unit=3600, unit_name="h"),

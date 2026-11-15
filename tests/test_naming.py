@@ -57,7 +57,7 @@ class Naming(unittest.TestCase):
         import sys
         sys.path.insert(0, str(ROOT))
         try:
-            import install
+            from claudemon.tap import installer as install
         finally:
             sys.path.remove(str(ROOT))
         self.assertEqual(install.MARK, "# claudemon")

@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import runtime  # noqa: E402
+from claudemon.core import runtime  # noqa: E402
 
 
 class TapPython(unittest.TestCase):
@@ -100,8 +100,8 @@ class Installer(unittest.TestCase):
 
     def test_fresh_install_bakes_tap_python_and_keeps_a_working_one(self):
         with tempfile.TemporaryDirectory() as home:
-            code = ("import runtime; runtime.tap_python = lambda *a: '/baked/one'\n"
-                    "import install; install.tap_python = runtime.tap_python\n"
+            code = ("from claudemon.core import runtime; runtime.tap_python = lambda *a: '/baked/one'\n"
+                    "from claudemon.tap import installer as install; install.tap_python = runtime.tap_python\n"
                     "print(install.install())\n")
             r = self.run_py(home, code)
             self.assertEqual(r.returncode, 0, r.stderr)
@@ -111,10 +111,10 @@ class Installer(unittest.TestCase):
     def test_vanished_interpreter_is_replaced_and_a_working_one_kept(self):
         with tempfile.TemporaryDirectory() as home:
             settings = Path(home, "settings.json")
-            first = ("import install; install.tap_python = lambda *a: %r\nprint(install.install())\n")
+            first = ("from claudemon.tap import installer as install; install.tap_python = lambda *a: %r\nprint(install.install())\n")
             self.assertEqual(self.run_py(home, first % "/gone/python3").returncode, 0)
             self.assertTrue(json.loads(settings.read_text())["statusLine"]["command"].startswith("/gone/python3 "))
-            fix = "import install; install.tap_python = lambda *a: %r\nprint(install.repair())\n"
+            fix = "from claudemon.tap import installer as install; install.tap_python = lambda *a: %r\nprint(install.repair())\n"
             self.assertEqual(self.run_py(home, fix % sys.executable).returncode, 0)
             cmd = json.loads(settings.read_text())["statusLine"]["command"]
             self.assertTrue(cmd.startswith(sys.executable + " "), cmd)
@@ -171,7 +171,7 @@ class SelfCommand(unittest.TestCase):
 
 class WindowCommand(unittest.TestCase):
     def test_window_command_has_no_cd_and_reruns_the_launcher(self):
-        import launch
+        from claudemon import window as launch
         main = mock.Mock(spec=[])
         with mock.patch.dict(sys.modules, {"__main__": main}), \
                 mock.patch.object(sys, "argv", [str(ROOT / "claudemon.py"), "--window"]):

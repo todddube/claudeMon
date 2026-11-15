@@ -5,7 +5,7 @@ The file is user-editable, so load() only promises a dict; the UI validates each
 import json
 import os
 
-from paths import STATE_DIR
+from claudemon.core.paths import STATE_DIR
 
 CONFIG_FILE = STATE_DIR / "config.json"
 

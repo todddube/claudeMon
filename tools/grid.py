@@ -20,10 +20,10 @@ def main():
     style = sys.argv[4] if len(sys.argv) > 4 else "blocks"
     cols, _, rows = size.partition("x")
     cols, rows = int(cols), int(rows)
-    import draw
-    import headless
-    import tui
-    from store import Store
+    from claudemon.ui import draw
+    from claudemon.ui import headless
+    from claudemon.ui import app as tui
+    from claudemon.sources.store import Store
 
     headless.install()
 

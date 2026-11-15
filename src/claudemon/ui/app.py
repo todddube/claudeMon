@@ -11,17 +11,17 @@ import time
 from collections import Counter, defaultdict
 from datetime import datetime
 
-import config
-import install
-import manual
-import tasks as tasks_mod
-from version import __version__
-from fmt import fclock, fdate, fdur, fpct, ftok
-from draw import GLYPHS, STYLE_NOTE, STYLES, Canvas, Screen, blocks, clip, detect_ascii, set_ascii
-from limits import WINDOWS
-from store import DONE, IDLE, NEEDS_YOU, WORKING, Store, short_model, weight
-from themes import ORDER as THEME_ORDER
-from themes import THEMES
+from claudemon.core import config
+from claudemon.tap import installer as install
+from claudemon.ui import manual
+from claudemon.ui import tasks as tasks_mod
+from claudemon import __version__
+from claudemon.core.fmt import fclock, fdate, fdur, fpct, ftok
+from claudemon.ui.draw import GLYPHS, STYLE_NOTE, STYLES, Canvas, Screen, blocks, clip, detect_ascii, set_ascii
+from claudemon.sources.limits import WINDOWS
+from claudemon.sources.store import DONE, IDLE, NEEDS_YOU, WORKING, Store, short_model, weight
+from claudemon.ui.themes import ORDER as THEME_ORDER
+from claudemon.ui.themes import THEMES
 
 SPANS = [(300, "5m"), (900, "15m"), (3600, "1h"), (6 * 3600, "6h"), (86400, "24h")]
 INTERVALS = [1, 2, 5, 10]

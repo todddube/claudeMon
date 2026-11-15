@@ -6,7 +6,7 @@ COMMANDS, so adding a subcommand is one function here and one line in the regist
 
 import time
 
-import install
+from claudemon.tap import installer as install
 
 
 def cmd_install(args):
@@ -18,7 +18,7 @@ def cmd_uninstall(args):
 
 
 def cmd_loops(args):
-    from store import Store
+    from claudemon.sources.store import Store
     store = Store()
     store.index()
     store.refresh()
@@ -38,8 +38,8 @@ def cmd_loops(args):
 
 
 def cmd_snapshot(args):
-    from store import Store, short_model
-    from fmt import fpct, ftok
+    from claudemon.sources.store import Store, short_model
+    from claudemon.core.fmt import fpct, ftok
     store = Store()
     store.index()
     store.refresh()

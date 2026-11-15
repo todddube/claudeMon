@@ -7,7 +7,7 @@ drive the detail pane; `role` is a theme colour role.
 import os
 import time
 
-from store import IDLE, LONG_TOOLS, NEEDS_YOU, WORKING, short_model
+from claudemon.sources.store import IDLE, LONG_TOOLS, NEEDS_YOU, WORKING, short_model
 
 RECENT_DONE_S = 600          # finished background tasks stay visible this long
 QUICK_TOOL_WARN_S = 45       # a non-long-running tool pending longer than this is flagged

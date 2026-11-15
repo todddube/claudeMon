@@ -14,9 +14,9 @@ import argparse
 import os
 import sys
 
-import commands
-from version import __version__
-from themes import ORDER
+from claudemon import commands
+from claudemon import __version__
+from claudemon.ui.themes import ORDER
 
 
 def main(argv=None):
@@ -34,14 +34,14 @@ def main(argv=None):
     p.add_argument("-V", "--version", action="version", version="claudemon " + __version__)
     args = p.parse_args(argv)
     if args.size:
-        from launch import parse_size
+        from claudemon.window import parse_size
         if not parse_size(args.size):
             p.error("--size must look like 150x46")
 
     if args.command in commands.COMMANDS:
         commands.COMMANDS[args.command](args)
     elif args.window:
-        from launch import open_window
+        from claudemon.window import open_window
         extra = []
         if args.theme:
             extra += ["--theme", args.theme]
@@ -59,7 +59,7 @@ def main(argv=None):
             sys.exit("claudemon needs a terminal; try `claudemon --window` or `claudemon snapshot`")
         if args.ascii:
             os.environ["CLAUDEMON_ASCII"] = "1"
-        from tui import run
+        from claudemon.ui.app import run
         run(args.theme, args.interval, args.page, args.mini)
 
 

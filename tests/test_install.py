@@ -104,7 +104,7 @@ class Install(Home):
     def test_a_users_own_tap_py_is_not_taken_for_ours(self):
         mine = {"statusLine": {"type": "command", "command": "python3 ~/bin/tap.py statusline"}}
         self.write(mine)
-        self.assertEqual(self.py("import install; print(install.repair())"), "")
+        self.assertEqual(self.py("from claudemon.tap import installer as install; print(install.repair())"), "")
         self.assertEqual(self.read(), mine)
         self.assertIn("installed", self.cli("install"))
         self.assertIn("'python3 ~/bin/tap.py statusline'", self.command())
@@ -166,7 +166,7 @@ class Install(Home):
             self.assertIn("unexpected shape", self.cli("install"), bad)
             self.assertIn("unexpected shape", self.cli("uninstall"), bad)
             self.assertEqual(self.settings.read_text(), bad)
-            self.assertEqual(self.py("import install; print(install.installed(), repr(install.repair()))"), "False ''")
+            self.assertEqual(self.py("from claudemon.tap import installer as install; print(install.installed(), repr(install.repair()))"), "False ''")
 
     @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root writes through a 0o500 folder (Linux CI containers)")
     def test_unwritable_settings_gives_a_message(self):
@@ -191,7 +191,7 @@ class Install(Home):
     def test_conflicting_write_is_refused(self):
         self.write({"a": 1})
         out = self.py(
-            "import install, json\n"
+            "import json\nfrom claudemon.tap import installer as install\n"
             "s, raw = install._read()\n"
             "open(install.SETTINGS_FILE, 'w').write(json.dumps({'a': 2}))\n"
             "try:\n    install._save({'a': 3}, raw)\nexcept install.Conflict:\n    print('conflict')\n")
@@ -214,10 +214,10 @@ class Migration(Home):
 
     def test_repair_moves_an_old_install_to_the_copy(self):
         self.legacy(ROOT / "tap.py")
-        self.assertIn("re-pointed", self.py("import install; print(install.repair())"))
+        self.assertIn("re-pointed", self.py("from claudemon.tap import installer as install; print(install.repair())"))
         self.assertIn(str(self.home / "claudemon" / "tap.py"), self.command())
         self.assertTrue(self.command().endswith("# claudemon"))
-        self.assertEqual(self.py("import install; print(repr(install.repair()))"), "''")
+        self.assertEqual(self.py("from claudemon.tap import installer as install; print(repr(install.repair()))"), "''")
         self.assertEqual(self.render(), ("legacy\n", 0))
         hook = self.read()["hooks"]["Notification"][0]["hooks"][0]["command"]
         self.assertIn(str(self.home / "claudemon" / "tap.py"), hook)
@@ -227,7 +227,7 @@ class Migration(Home):
         tap = self.tmp / "My Repo" / "claudemon" / "tap.py"
         inner = "%s %s statusline -- %s" % (sys.executable, shlex.quote(str(tap)), shlex.quote("echo deep"))
         self.legacy(tap, original=inner)
-        self.assertEqual(self.py("import install; print(install.unwrap(install._read()[0]['statusLine']['command']))"),
+        self.assertEqual(self.py("from claudemon.tap import installer as install; print(install.unwrap(install._read()[0]['statusLine']['command']))"),
                          "echo deep")
         self.cli("install")
         self.assertEqual(self.command().count("statusline"), 1)
@@ -250,13 +250,13 @@ class Migration(Home):
         p = self.settings
         p.write_text(p.read_text().replace(json.dumps(self.command().split()[0])[1:-1], "/gone/python3"))
         self.assertIn("/gone/", p.read_text())
-        self.assertIn("re-pointed", self.py("import install; print(install.repair())"))
+        self.assertIn("re-pointed", self.py("from claudemon.tap import installer as install; print(install.repair())"))
         self.assertNotIn("/gone/", p.read_text())
 
     def test_repair_refreshes_a_stale_copy(self):
         self.cli("install")
         (self.home / "claudemon" / "tap.py").write_text("# old\n")
-        self.assertEqual(self.py("import install; print(install.repair())"), "tap updated")
+        self.assertEqual(self.py("from claudemon.tap import installer as install; print(install.repair())"), "tap updated")
         self.assertEqual((self.home / "claudemon" / "tap.py").read_bytes(), (ROOT / "tap.py").read_bytes())
 
 

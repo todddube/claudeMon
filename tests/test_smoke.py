@@ -22,7 +22,7 @@ def run(*args, env=None, **kw):
 
 class Ascii(unittest.TestCase):
     def test_every_glyph_in_the_sources_has_a_mapping(self):
-        import draw
+        from claudemon.ui import draw
         missing = set()
         for f in list(ROOT.glob("*.py")):
             for ch in f.read_text():
@@ -31,12 +31,12 @@ class Ascii(unittest.TestCase):
         self.assertFalse(missing, "no ASCII fallback for: " + "".join(sorted(missing)))
 
     def test_to_ascii(self):
-        import draw
+        from claudemon.ui import draw
         self.assertEqual(draw.to_ascii("╭─┤x├╮ ▁█ ●▲○"), "+-+x++ .# *^o")
         self.assertTrue(draw.to_ascii("⣿⠁⠀").isascii())
 
     def test_detect(self):
-        import draw
+        from claudemon.ui import draw
         keep = {k: os.environ.pop(k, None) for k in ("CLAUDEMON_ASCII", "LC_ALL", "LC_CTYPE", "LANG", "TERM")}
         try:
             os.environ["LANG"] = "en_US.UTF-8"
@@ -53,7 +53,7 @@ class Ascii(unittest.TestCase):
 
 class Styles(unittest.TestCase):
     def test_styles_have_glyph_sets_and_notes(self):
-        import draw
+        from claudemon.ui import draw
         self.assertEqual(draw.STYLES, ("blocks", "braille", "dots", "line", "ascii"))
         for st in draw.STYLES:
             self.assertIn(st, draw.STYLE_NOTE)
@@ -63,7 +63,7 @@ class Styles(unittest.TestCase):
                 self.assertEqual(len(full), 1)
 
     def test_trace_draws_a_line_not_a_fill(self):
-        import draw
+        from claudemon.ui import draw
         cv = draw.Canvas(20, 6)
         cv.trace([1, 5, 9, 5, 1, 5, 9, 5, 1, 5], 10)
         lit = sum(bin(b).count("1") for row in cv.bits for b in row)
@@ -159,7 +159,7 @@ class Tap(unittest.TestCase):
             self.cli(home, "install")
             p = Path(home, "settings.json")
             p.write_text(p.read_text().replace(sys.executable, "/gone/python3").replace("/usr/bin/python3", "/gone/python3"))
-            r = run("-c", "import install;print(install.repair())", env={"CLAUDE_CONFIG_DIR": home})
+            r = run("-c", "from claudemon.tap import installer as install;print(install.repair())", env={"CLAUDE_CONFIG_DIR": home})
             self.assertIn("re-pointed", r.stdout)
             self.assertNotIn("/gone/", p.read_text())
 

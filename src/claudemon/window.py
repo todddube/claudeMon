@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import sys
 
-from runtime import self_command
+from claudemon.core.runtime import self_command
 
 
 def _command(extra, env=None):

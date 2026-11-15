@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import sys
 
-from paths import stable_python
+from claudemon.core.paths import stable_python
 
 SYSTEM_PYTHON = "/usr/bin/python3"
 PROBE_TIMEOUT_S = 5

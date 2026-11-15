@@ -12,10 +12,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import limits  # noqa: E402
-import procs  # noqa: E402
-import transcript  # noqa: E402
-from transcript import Transcript  # noqa: E402
+from claudemon.sources import limits  # noqa: E402
+from claudemon.sources import procs  # noqa: E402
+from claudemon.sources import transcript  # noqa: E402
+from claudemon.sources.transcript import Transcript  # noqa: E402
 
 
 def jl(*recs):
@@ -267,7 +267,7 @@ class StoreTests(unittest.TestCase):
             (proj / "s2.jsonl").mkdir()          # a directory where a file is expected
             (home / "claudemon").mkdir()
             (home / "claudemon" / "limits.jsonl").write_text(jl({"ts": "bad"}, {"seven_day": 5}, 7))
-            out = self.run_py(home, "import store\ns = store.Store()\ns.index()\ns.refresh()\n"
+            out = self.run_py(home, "from claudemon.sources import store\ns = store.Store()\ns.index()\ns.refresh()\n"
                                     "print(s.indexed, len(s.sessions), 'ok' in s.sessions['s1'].t.calls)")
             self.assertEqual(out, "True 2 True")
 
@@ -277,7 +277,7 @@ class StoreTests(unittest.TestCase):
             (home / "sessions").mkdir()
             month_ago = time.strftime("%a %b %d %H:%M:%S %Y", time.gmtime(time.time() - 30 * 86400))
             (home / "sessions" / "a.json").write_text(json.dumps({"sessionId": "a", "pid": os.getpid(), "procStart": month_ago}))
-            code = ("import os, store, procs, time\ns = store.Store()\ns.refresh()\n"
+            code = ("import os, time\nfrom claudemon.sources import store\nfrom claudemon.sources import procs\ns = store.Store()\ns.refresh()\n"
                     "me = s.procs.get(os.getpid())\n"
                     "real = time.strftime('%a %b %d %H:%M:%S %Y', time.gmtime(time.time() - me.elapsed))\n"
                     "print(sorted(x for x in s.sessions if s.sessions[x].live), s.is_live({'pid': os.getpid()}),\n"
@@ -292,7 +292,7 @@ class StoreTests(unittest.TestCase):
             old = "2026-01-01T00:00:00Z"
             p.write_text(jl(asst("m", ts=old, tools=[("t1", "Bash", {"command": "sleep 9999"})])))
             os.utime(p, (time.time() - 1200, time.time() - 1200))
-            code = ("import json, store, time\n"
+            code = ("import json, time\nfrom claudemon.sources import store\n"
                     "a = store.Agent(%r)\na.refresh()\na.t.last_ts = time.time() - 1200\n"
                     "busy = a.finished\na.t.pending_tools.clear()\nidle = a.finished\n"
                     "a.t.pending_tools['t1'] = ('Bash', 0, '')\na.meta = {'stoppedByUser': True}\n"
@@ -302,7 +302,7 @@ class StoreTests(unittest.TestCase):
     def test_readers_survive_concurrent_inserts(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import threading, store, transcript\n"
+                "import threading\nfrom claudemon.sources import store\nfrom claudemon.sources import transcript\n"
                 "s = store.Session('x', '/nonexistent')\n"
                 "stop = False\n"
                 "def writer():\n"
@@ -325,7 +325,7 @@ class TuiInput(unittest.TestCase):
     """Drives tui.App with the fake curses window from headless.py."""
 
     def run_py(self, code, home):
-        r = subprocess.run([sys.executable, "-c", "import sys; sys.argv=['grid']\nimport headless as g\ng.install()\n" + code],
+        r = subprocess.run([sys.executable, "-c", "import sys; sys.argv=['grid']\nfrom claudemon.ui import headless as g\ng.install()\n" + code],
                            cwd=str(ROOT), capture_output=True, text=True, timeout=60,
                            env=dict(os.environ, CLAUDE_CONFIG_DIR=home, CLAUDEMON_DEMO="1", TERM_PROGRAM="none"))
         self.assertEqual(r.returncode, 0, r.stderr[-2000:])
@@ -334,7 +334,7 @@ class TuiInput(unittest.TestCase):
     def test_bad_config_values_and_keys(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import tui, store\n"
+                "from claudemon.ui import app as tui\nfrom claudemon.sources import store\n"
                 "st = store.Store(); st.indexed = True\n"
                 "for cfg in ({'page': 99, 'interval': 7, 'span': -1, 'theme': ['x'], 'graph': 5, 'full_size': 'x'},\n"
                 "            {'page': 'x', 'page_name': 'Tasks'}, {'page': True}):\n"
@@ -356,7 +356,7 @@ class TuiInput(unittest.TestCase):
     def test_manual_and_help_leave_mini(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import tui, store\n"
+                "from claudemon.ui import app as tui\nfrom claudemon.sources import store\n"
                 "st = store.Store(); st.indexed = True\n"
                 "for k in ('m', '?'):\n"
                 "    app = tui.App(g.FakeWin(12, 74), st, {'mini': True, 'tap_prompt_seen': True})\n"
@@ -367,7 +367,7 @@ class TuiInput(unittest.TestCase):
     def test_install_prompt_ignores_keys_while_the_window_is_too_small(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import tui, store, install\n"
+                "from claudemon.ui import app as tui\nfrom claudemon.sources import store\nfrom claudemon.tap import installer as install\n"
                 "st = store.Store(); st.indexed = True\n"
                 "app = tui.App(g.FakeWin(12, 60), st, {'tap_prompt_seen': True})\n"
                 "app.tick(force=True); app.modal = 'prompt'; app.draw()\n"
@@ -378,7 +378,7 @@ class TuiInput(unittest.TestCase):
     def test_alt_key_is_not_a_quit_and_esc_is(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import curses, tui, store\n"
+                "import curses\nfrom claudemon.ui import app as tui\nfrom claudemon.sources import store\n"
                 "class W(g.FakeWin):\n"
                 "    keys = []\n"
                 "    def nodelay(self, f): pass\n"
@@ -395,7 +395,7 @@ class TuiInput(unittest.TestCase):
     def test_first_launch_in_mini_does_not_raise_the_install_prompt(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import curses, tui, store\n"
+                "import curses\nfrom claudemon.ui import app as tui\nfrom claudemon.sources import store\n"
                 "class W(g.FakeWin):\n"
                 "    keys = ['\\n', 'q']\n"
                 "    def nodelay(self, f): pass\n"
@@ -407,14 +407,14 @@ class TuiInput(unittest.TestCase):
                 "st = store.Store(); st.indexed = True\n"
                 "app = tui.App(W(12, 74), st, {'mini': True})\n"
                 "app.run()\n"
-                "import os, paths\n"
+                "import os\nfrom claudemon.core import paths\n"
                 "print(app.modal, os.path.exists(paths.SETTINGS_FILE))\n")
             self.assertEqual(self.run_py(code, home), "None False")
 
     def test_keyboard_interrupt_saves_and_exits_cleanly(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import curses, json, tui, store, config\n"
+                "import curses, json\nfrom claudemon.ui import app as tui\nfrom claudemon.sources import store\nfrom claudemon.core import config\n"
                 "class W(g.FakeWin):\n"
                 "    def nodelay(self, f): pass\n"
                 "    def timeout(self, t): pass\n"
@@ -429,7 +429,7 @@ class TuiInput(unittest.TestCase):
 
 class ModelNames(unittest.TestCase):
     def test_short_model(self):
-        import store
+        from claudemon.sources import store
         for raw, want in (("claude-opus-5-5", "Opus 5.5"), ("claude-opus-4-7[1m]", "Opus 4.7"),
                           ("claude-sonnet-4-5@20250929", "Sonnet 4.5"), ("us.anthropic.claude-haiku-4-5-20251001-v1:0", "Haiku 4.5"),
                           ("claude-3-5-sonnet-20241022", "Sonnet 3.5"), ("claude-opus-4-20250514", "Opus 4"),
@@ -452,7 +452,7 @@ class SettingsPage(unittest.TestCase):
 
 class LaunchSize(unittest.TestCase):
     def test_size_is_validated(self):
-        import launch
+        from claudemon import window as launch
         self.assertEqual(launch.parse_size("150x46"), ("150", "46"))
         for bad in ('1" & (do shell script "x") & "x5', "150", "x46", "150x46 ", ""):
             self.assertIsNone(launch.parse_size(bad), bad)
@@ -460,7 +460,7 @@ class LaunchSize(unittest.TestCase):
 
 class Headless(unittest.TestCase):
     def test_importing_headless_leaves_curses_alone_until_install(self):
-        code = ("import curses, headless\n"
+        code = ("import curses\nfrom claudemon.ui import headless\n"
                 "assert not hasattr(curses, 'COLORS') or curses.COLORS != 256\n"
                 "headless.install()\n"
                 "assert curses.COLORS == 256 and curses.color_pair(3) == 3 << 24\n"
@@ -471,12 +471,12 @@ class Headless(unittest.TestCase):
 
 class Fmt(unittest.TestCase):
     def test_formatters_and_the_command_modules_do_not_import_the_tui(self):
-        import fmt
+        from claudemon.core import fmt
         self.assertEqual(fmt.ftok(1234), "1.23k")
         self.assertEqual(fmt.fdur(3700), "1h01m")
         self.assertEqual(fmt.fpct(.5), "50%")
         self.assertEqual(fmt.fpct(None), "—")
-        r = subprocess.run([sys.executable, "-c", "import sys, commands, fmt, store; assert 'tui' not in sys.modules"],
+        r = subprocess.run([sys.executable, "-c", "import sys; from claudemon import commands; from claudemon.core import fmt; from claudemon.sources import store; assert 'claudemon.ui.app' not in sys.modules"],
                            cwd=str(ROOT), capture_output=True, text=True, timeout=30)
         self.assertEqual(r.returncode, 0, r.stderr[-500:])
 

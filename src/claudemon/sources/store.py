@@ -16,11 +16,11 @@ import re
 import threading
 import time
 
-from limits import LimitLog
-from limits import compact as compact_limits
-from paths import JOBS_DIR, PROJECTS_DIR, SCHEDULED_DIR, SESSIONS_DIR, STATUS_DIR
-from procs import Processes
-from transcript import Transcript, Usage
+from claudemon.sources.limits import LimitLog
+from claudemon.sources.limits import compact as compact_limits
+from claudemon.core.paths import JOBS_DIR, PROJECTS_DIR, SCHEDULED_DIR, SESSIONS_DIR, STATUS_DIR
+from claudemon.sources.procs import Processes
+from claudemon.sources.transcript import Transcript, Usage
 
 HISTORY_S = 8 * 86400           # transcripts this recent feed the history pages
 RESCAN_S = 20                   # how often to look for new transcript files

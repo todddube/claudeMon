@@ -16,8 +16,8 @@ import stat
 import time
 from pathlib import Path
 
-from paths import SETTINGS_FILE, STATE_DIR, TAP_BACKUP
-from runtime import tap_choice, tap_python
+from claudemon.core.paths import SETTINGS_FILE, STATE_DIR, TAP_BACKUP
+from claudemon.core.runtime import tap_choice, tap_python
 
 TAP_SRC = Path(__file__).resolve().parent / "tap.py"   # the copy in this checkout
 TAP = STATE_DIR / "tap.py"                              # the copy settings.json runs

@@ -1,25 +1,26 @@
-"""Parity adapter for the tree under test (the working tree): the flat layout today.
+"""Parity adapter for the tree under test (the working tree): the src/claudemon/ package.
 
 It is the only harness code that knows the tree's internals. It changes as the App
 changes (phase 5); review every change like code, because a wrong adapter can hide a
 difference.
 """
 
+import os
 import sys
 
 # Paths inside the tree, relative to its root.
 CLI = "claudemon.py"                 # the command line, run as a script
-DEMO = "utils/make_demo.py"          # the demo-home generator
-TAP_SOURCE = "tap.py"                # the tap the installer copies
+DEMO = "tools/make_demo.py"          # the demo-home generator
+TAP_SOURCE = "src/claudemon/tap/tap.py"   # the tap the installer copies
 
 
 def load(root):
     """Make the tree importable and return the handles the driver uses."""
-    sys.path.insert(0, root)
-    import draw
-    import install
-    import store
-    import tui
+    sys.path.insert(0, os.path.join(root, "src"))
+    from claudemon.sources import store
+    from claudemon.tap import installer as install
+    from claudemon.ui import app as tui
+    from claudemon.ui import draw
     return dict(draw=draw, install=install, store=store, tui=tui)
 
 

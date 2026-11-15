@@ -14,6 +14,31 @@ re-read loop detection, honest limit forecasts and a built-in manual.
 
 ## Install
 
+### Homebrew
+
+```sh
+brew tap todddube/claudemon https://github.com/todddube/claudeMon
+brew install --HEAD todddube/claudemon/claudemon
+claudemon install
+```
+
+- Run `claudemon install` after installing: it adds the tap (see below) to Claude Code.
+- Run `claudemon uninstall` before `brew uninstall`, so your status line is restored first.
+- Upgrade with `brew upgrade --fetch-HEAD claudemon`.
+
+The short form, `brew tap todddube/claudemon`, comes later.
+
+### uv
+
+Install it as a command with [uv](https://docs.astral.sh/uv/), from a clone or straight from GitHub:
+
+```sh
+uv tool install .                                            # from a clone
+uv tool install git+https://github.com/todddube/claudeMon    # or without one
+```
+
+### A clone
+
 ```sh
 git clone https://github.com/todddube/claudeMon.git
 cd claudeMon
@@ -21,38 +46,33 @@ cd claudeMon
 ```
 
 No dependencies and no build step: standard library only. The root `claudemon.py` runs the package in
-`src/claudemon/` straight from the clone, on the stock `/usr/bin/python3`.
-
-Or install it as a command with [uv](https://docs.astral.sh/uv/), from a clone or straight from GitHub:
-
-```sh
-uv tool install .                                            # from the clone
-uv tool install git+https://github.com/todddube/claudeMon    # or without one
-```
-
-From a clone you can also run `uv run claudemon` or `python3 -m claudemon` (from the clone's folder).
+`src/claudemon/` straight from the clone, on the stock `/usr/bin/python3` (3.9). Put it on your PATH with
+`ln -s "$PWD/claudemon.py" ~/.local/bin/claudemon`. From a clone you can also run `uv run claudemon` or
+`python3 -m claudemon` (from the clone's folder).
 
 ## Run
 
+The examples use `claudemon`, the command from Homebrew, uv or the symlink. From a clone, run
+`./claudemon.py` instead; it takes the same arguments.
+
 ```sh
-./claudemon.py                 # in this terminal (150×40 or larger is best)
-./claudemon.py --window        # in its own window titled "claudeMon" (Terminal, iTerm or Ghostty)
-./claudemon.py --mini          # start in the mini view (z switches between mini and full)
-./claudemon.py -t dracula      # pick a theme (t cycles, b cycles graph styles)
-./claudemon.py -p tasks        # start on a page (name or number)
+claudemon                 # in this terminal (150×40 or larger is best)
+claudemon --window        # in its own window titled "claudeMon" (Terminal, iTerm or Ghostty; macOS only)
+claudemon --mini          # start in the mini view (z switches between mini and full)
+claudemon -t dracula      # pick a theme (t cycles, b cycles graph styles)
+claudemon -p tasks        # start on a page (name or number)
 ```
 
-Put it on your PATH with `ln -s "$PWD/claudemon.py" ~/.local/bin/claudemon`.
-**Requirements:** macOS with Python 3.9 or newer (the `/usr/bin/python3` that comes with the Xcode
-command line tools works; tested on 3.9 and 3.13), a 256-colour terminal and, ideally, a UTF-8 locale (the
-default in Terminal, iTerm and Ghostty). Without one (a C locale, the Linux console, `TERM=dumb`) claudeMon
-switches to plain-ASCII drawing by itself; force it with `--ascii` or `CLAUDEMON_ASCII=1`, or turn it off with
-`CLAUDEMON_ASCII=0`. Linux should work but is untested. If macOS asks to install
-the command line tools the first time you run it, accept, then run it again.
+**Requirements:** Python 3.9 or newer (macOS's `/usr/bin/python3` from the Xcode command line tools works;
+tested on 3.9 and 3.13), a 256-colour terminal and, ideally, a UTF-8 locale (the default in Terminal, iTerm
+and Ghostty). Without one (a C locale, the Linux console, `TERM=dumb`) claudeMon switches to plain-ASCII
+drawing by itself; force it with `--ascii` or `CLAUDEMON_ASCII=1`, or turn it off with `CLAUDEMON_ASCII=0`.
+macOS and Linux are both tested (Ubuntu in WSL2, and CI's ubuntu-latest); `--window` works on macOS only.
+If macOS asks to install the command line tools the first time you run it, accept, then run it again.
 
 `--window` drives Terminal, iTerm or Ghostty through AppleScript, so macOS may ask once to let your
 terminal control it (System Settings > Privacy & Security > Automation). If you decline, just run
-`./claudemon.py` directly.
+`claudemon` directly.
 
 ## ⚡ Install the tap for limits and alerts
 
@@ -224,9 +244,13 @@ claudemon install      # add the tap          claudemon uninstall   # remove it
 | `src/claudemon/tap/` | the status-line tap (standalone) and its reversible installer |
 | `src/claudemon/ui/` | the interface: the app loop, one module per page in `pages/`, the mini view and modals, drawing primitives, colour themes, the manual text |
 | `pyproject.toml` `uv.lock` | packaging and developer tooling: uv dependency groups, ruff and pytest settings |
-| `tools/` | demo data generator and the screenshot pipeline ([README](tools/README.md)) |
+| `Formula/` | the Homebrew formula, `claudemon.rb` |
+| `docs/` | [SPEC](docs/SPEC.md), [ARCHITECTURE](docs/ARCHITECTURE.md), [RELEASING](docs/RELEASING.md) and the review notes |
+| `tests/` | the test suite, its shared helpers in `tests/support.py`, and the parity harness in `tests/parity/` |
+| `tools/` | demo data generator, the screenshot pipeline and the formula check ([README](tools/README.md)) |
 
-See [docs/SPEC.md](docs/SPEC.md) for the analysis of Himamushi, the data sources and the design.
+See [docs/SPEC.md](docs/SPEC.md) for the analysis of Himamushi, the data sources and the design, and
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how to add a page, subcommand or data source.
 
 ## Privacy
 
@@ -243,13 +267,26 @@ uv run pytest              # everyday runner (uv installs pytest and ruff from t
 uv run ruff check          # lint
 ```
 
-About 15 seconds. `test_smoke.py` renders every page (Unicode and ASCII, plus a tiny
-terminal) from the demo data and checks the CLI on an empty home. `test_install.py` round-trips the tap
-install against throwaway config directories (odd `settings.json` shapes, symlinks, a checkout path with a
-space, older installs). `test_units.py` feeds malformed and real-shaped records to the parsers, the limit
-forecast, the process classifier and the TUI's key handling. `test_tap_python.py` covers which Python the tap bakes and how `--window` starts claudeMon again. `test_packaging.py`
-checks every way of starting claudeMon reaches the one package in `src/` (and, with uv, the built wheel), and
-`test_boundaries.py` that the data layers never import the interface or curses. CI runs them on macOS and Linux with Python 3.9 and 3.13, plus ruff.
+About 15 seconds. Each file covers one area:
+
+| File | What it checks |
+|---|---|
+| `test_smoke.py` | renders every page (Unicode and ASCII, plus a tiny terminal) from the demo data, and the CLI on an empty home |
+| `test_install.py` | round-trips the tap install against throwaway config directories (odd `settings.json` shapes, symlinks, a checkout path with a space, older installs) |
+| `test_units.py` | feeds malformed and real-shaped records to the parsers, the limit forecast, the process classifier and the TUI's key handling |
+| `test_tap_python.py` | which Python the tap bakes, and how `--window` starts claudeMon again |
+| `test_packaging.py` | every way of starting claudeMon reaches the one package in `src/`, the built wheel (with uv), and the Homebrew formula; the real brew run needs `CLAUDEMON_BREW_CHECK=1` |
+| `test_boundaries.py` | the layers (data layers never import the interface or curses), the headless routes, and that pages read data only through Store methods |
+| `test_naming.py` | the claudeMon and claudemon naming rule |
+| `test_extension.py` | a page, a subcommand and a data source added through their registries |
+| `test_pages_graphs.py`, `test_pages_interactive.py` | the chart pages and the pages with their own keys |
+| `test_mini.py`, `test_modals.py` | the mini view, and the help, manual and first-launch overlays |
+
+`tests/parity/harness.py` (`python3 tests/parity/harness.py`; see [tests/parity/README.md](tests/parity/README.md))
+compares the screens and commands against a pinned earlier commit, for changes that must not alter behaviour.
+
+CI runs the tests on macOS and Linux with Python 3.9 and 3.13, plus ruff, the wheel, the tap on the system
+Python and Homebrew. [docs/RELEASING.md](docs/RELEASING.md) describes how a release is cut.
 
 ## Regenerating the screenshots
 

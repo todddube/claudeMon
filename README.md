@@ -8,7 +8,7 @@ Python standard library only. Reads local files only. Uses no tokens.
 
 ![Token burn](screenshots/token-burn.png)
 
-Inspired by [Himamushi](SPEC.md#1-what-himamushi-is), a web dashboard posted to r/ClaudeCode.
+Inspired by [Himamushi](docs/SPEC.md#1-what-himamushi-is), a web dashboard posted to r/ClaudeCode.
 claudeMon takes the same idea into a btop-style terminal UI and adds a live task tree,
 re-read loop detection, honest limit forecasts and a built-in manual.
 
@@ -20,7 +20,17 @@ cd claudeMon
 ./claudemon.py
 ```
 
-No dependencies and no build step: standard library only. (`pyproject.toml` holds only the developer tooling config.)
+No dependencies and no build step: standard library only. The root `claudemon.py` runs the package in
+`src/claudemon/` straight from the clone, on the stock `/usr/bin/python3`.
+
+Or install it as a command with [uv](https://docs.astral.sh/uv/), from a clone or straight from GitHub:
+
+```sh
+uv tool install .                                            # from the clone
+uv tool install git+https://github.com/todddube/claudeMon    # or without one
+```
+
+From a clone you can also run `uv run claudemon` or `python3 -m claudemon` (from the clone's folder).
 
 ## Run
 
@@ -204,18 +214,19 @@ claudemon install      # add the tap          claudemon uninstall   # remove it
 
 ## Layout
 
-| File | |
+| Path | |
 |---|---|
-| `claudemon.py` | entry point and command line |
-| `tui.py` `draw.py` `themes.py` | the interface, drawing primitives, colour themes |
-| `store.py` `transcript.py` `limits.py` | sessions, transcript parsing, limit forecasting |
-| `tasks.py` `procs.py` | the Tasks tree and the process snapshot |
-| `tap.py` `install.py` | the status-line tap and its reversible installer |
-| `manual.py` `launch.py` `runtime.py` `config.py` `paths.py` | manual text, window launcher, which Python the tap and new windows use, preferences, locations |
-| `pyproject.toml` `uv.lock` | developer tooling: uv dependency groups, ruff and pytest settings |
-| `utils/` | demo data generator and the screenshot pipeline ([README](utils/README.md)) |
+| `claudemon.py` | runs claudeMon from a clone (a small wrapper around `src/claudemon/`) |
+| `tap.py` | a shim for installs from before the tap was copied to `~/.claude/claudemon/`; removed in a later release |
+| `src/claudemon/` `cli.py` `commands.py` `window.py` | the command line, the one-shot subcommands, the `--window` launcher |
+| `src/claudemon/core/` | locations, preferences, formatters, which Python the tap and new windows use |
+| `src/claudemon/sources/` | sessions, transcript parsing, limit forecasting, the process snapshot |
+| `src/claudemon/tap/` | the status-line tap (standalone) and its reversible installer |
+| `src/claudemon/ui/` | the interface, drawing primitives, colour themes, the manual text, the Tasks tree |
+| `pyproject.toml` `uv.lock` | packaging and developer tooling: uv dependency groups, ruff and pytest settings |
+| `tools/` | demo data generator and the screenshot pipeline ([README](tools/README.md)) |
 
-See [SPEC.md](SPEC.md) for the analysis of Himamushi, the data sources and the design.
+See [docs/SPEC.md](docs/SPEC.md) for the analysis of Himamushi, the data sources and the design.
 
 ## Privacy
 
@@ -236,14 +247,16 @@ About 15 seconds. `test_smoke.py` renders every page (Unicode and ASCII, plus a 
 terminal) from the demo data and checks the CLI on an empty home. `test_install.py` round-trips the tap
 install against throwaway config directories (odd `settings.json` shapes, symlinks, a checkout path with a
 space, older installs). `test_units.py` feeds malformed and real-shaped records to the parsers, the limit
-forecast, the process classifier and the TUI's key handling. `test_tap_python.py` covers which Python the tap bakes and how `--window` starts claudeMon again. CI runs them on macOS and Linux with Python 3.9 and 3.13, plus ruff.
+forecast, the process classifier and the TUI's key handling. `test_tap_python.py` covers which Python the tap bakes and how `--window` starts claudeMon again. `test_packaging.py`
+checks every way of starting claudeMon reaches the one package in `src/` (and, with uv, the built wheel), and
+`test_boundaries.py` that the data layers never import the interface or curses. CI runs them on macOS and Linux with Python 3.9 and 3.13, plus ruff.
 
 ## Regenerating the screenshots
 
 ```sh
-python3 utils/shots.py                 # all of them into ./screenshots
-python3 utils/shots.py tasks manual    # just these
+python3 tools/shots.py                 # all of them into ./screenshots
+python3 tools/shots.py tasks manual    # just these
 ```
 
-The pipeline needs no display and uses synthetic data; see [utils/README.md](utils/README.md) for how
+The pipeline needs no display and uses synthetic data; see [tools/README.md](tools/README.md) for how
 it works, how to add a screenshot and how to try the demo data yourself.

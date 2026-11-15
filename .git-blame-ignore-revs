@@ -1,0 +1,6 @@
+# Commits that only move files or rewrite import lines; `git blame` skips them with
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (GitHub does this on its own.)
+
+# Phase 3a: the flat modules move into src/claudemon/ (git mv and import rewrites only)
+7cce2dde799576b867d24ae87a612fc6696ae846

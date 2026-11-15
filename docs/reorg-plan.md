@@ -193,7 +193,7 @@ depend on it, the machine form is the same name lowercased: `claudemon`.
 |---|---|---|
 | `claudeMon` | Prose, UI and window titles, docs, GitHub URLs, the `pyproject` project name, formula `homepage`/`head`/caveats | The repo name. PyPI and pip normalise `claudeMon` to `claudemon`, so the project name can keep its case |
 | `claudemon` | Formula and tap name | Homebrew requires lowercase |
-| `claudemon` | Python import package (`src/claudemon/`), declared as `[tool.flit.module] name = "claudemon"` | Convention; mixed-case packages are unsafe on case-insensitive filesystems |
+| `claudemon` | Python import package (`src/claudemon/`), found by name under `src/` (`[tool.setuptools.packages.find]`), never derived from the project name | Convention; mixed-case packages are unsafe on case-insensitive filesystems |
 | `claudemon` | CLI command, `~/.claude/claudemon/`, the `# claudemon` settings marker, `claudemon.code-workspace` | Existing installs and habits depend on them |
 | `claudemon` in prose | Where the text means the command, e.g. "run `claudemon install`" | It is the command |
 | `CLAUDEMON_*` | `_ASCII`, `_RESIZE`, `_TERMINAL`, `_DEMO` | Uppercase of the machine form |
@@ -295,15 +295,20 @@ harness's `--window` scenarios and `test_tap_python`'s `self_command` cases catc
   can't build a flat multi-module tree, and `claudemon.cli:main` has no target yet. uv treats a
   pyproject without a build system as a virtual project and installs only the groups (checked with
   uv 0.12.1).
-- **Packaging from phase 3b:** PEP 621, src layout, `[build-system]` flit-core,
-  `[tool.flit.module] name = "claudemon"`, version read from `__init__.__version__`, script
-  `claudemon = "claudemon.cli:main"`. The module line is required: flit-core 4.2 derives the module
+- **Packaging from phase 3b (as built: setuptools, see the next bullet):** PEP 621, src layout,
+  `[build-system]` setuptools, the package found as `claudemon*` under `src/`, version read from
+  `__init__.__version__`, script `claudemon = "claudemon.cli:main"`. Originally planned with flit-core and
+  `[tool.flit.module] name = "claudemon"`, which was required because flit-core 4.2 derives the module
   name from the project name without lowercasing, so `claudeMon` would look for `src/claudeMon/`,
   which passes on case-insensitive macOS and fails on Linux. `tap/tap.py` ships in the wheel as an
   ordinary file of the package; the installer copies its bytes.
-- **Build backend: flit-core.** Homebrew builds the backend from source at install time, so the
-  smallest backend wins:
-  - flit-core has no dependencies of its own.
+- **Build backend: setuptools (changed in phase 3b).** Homebrew builds the backend from source at
+  install time, so the smallest backend wins:
+  - flit-core was the first choice but cannot build this tree: flit-core 3.12, 4.0.2 and 4.2.0 all
+    stop with "Multiple files or folders could be module claudemon" when both the root
+    `claudemon.py` (kept as the clone route's wrapper) and `src/claudemon/` exist.
+  - setuptools (>= 77, for the SPDX `license`) has no dependencies of its own; the formula needs it
+    as a resource.
   - hatchling pulls several.
   - `uv_build` needs Rust to build from source.
 - **uv:** `uv sync`, `uv run claudemon` (from 3b), `uv run pytest`, `uv run ruff check`. Dependency
@@ -541,7 +546,7 @@ the parity harness on the Mac and on BOSS. PR boundaries are cut later from the 
      skip hides nothing.
    - **3b. Make it run.**
      - The new root `claudemon.py` (self-replacing wrapper) and the root `tap.py` shim.
-     - Packaging: `[build-system]`, the flit module name, the script entry, `__main__.py`, and the
+     - Packaging: `[build-system]`, the package name, the script entry, `__main__.py`, and the
        wheel half of `test_packaging` (`claudemon.__file__`, `installer.TAP_SRC` exists in the
        installed wheel and matches `src/claudemon/tap/tap.py` byte for byte).
      - The tests that go vacuous or break, by name: the glyph audit in `test_smoke.py:27` globs

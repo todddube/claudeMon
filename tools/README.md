@@ -1,4 +1,4 @@
-# utils: demo data and the screenshot pipeline
+# tools: demo data and the screenshot pipeline
 
 Everything here is for development. claudeMon itself never imports it.
 
@@ -37,8 +37,8 @@ No display is needed. It works while the screen is locked or asleep, unlike capt
 ## Use
 
 ```sh
-python3 utils/shots.py                    # every shot into ./screenshots (about a minute)
-python3 utils/shots.py tasks theme-nord   # only these, by name
+python3 tools/shots.py                    # every shot into ./screenshots (about a minute)
+python3 tools/shots.py tasks theme-nord   # only these, by name
 ```
 
 Requirements: Python 3, Chrome/Chromium/Edge, macOS `sips` (optional, for the resize) and Pillow (optional,
@@ -47,7 +47,7 @@ for the shrink). `uv sync --group shots` installs Pillow; Chrome (set `CHROME=/p
 ### Try the demo data yourself
 
 ```sh
-python3 utils/make_demo.py /tmp/demo --pid $$        # --no-tap leaves the tap uninstalled
+python3 tools/make_demo.py /tmp/demo --pid $$        # --no-tap leaves the tap uninstalled
 CLAUDE_CONFIG_DIR=/tmp/demo CLAUDEMON_DEMO=1 ./claudemon.py
 ```
 
@@ -57,7 +57,7 @@ Run `./claudemon.py install` with the same environment first if you want the lim
 ### Run one frame by hand
 
 ```sh
-CLAUDE_CONFIG_DIR=/tmp/demo CLAUDEMON_DEMO=1 python3 utils/grid.py 120x34 claude traffic braille
+CLAUDE_CONFIG_DIR=/tmp/demo CLAUDEMON_DEMO=1 python3 tools/grid.py 120x34 claude traffic braille
 # arguments: COLSxROWS THEME PAGE [STYLE]      PAGE is anything `claudemon -p` accepts
 ```
 

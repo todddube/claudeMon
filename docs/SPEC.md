@@ -101,22 +101,24 @@ A terminal UI in the style of btop, syswatch and netwatch: Python stdlib only (`
 
 ### Module map
 
+Paths are under `src/claudemon/` unless they start with `tools/` or `tests/`.
+
 | Module | Role |
 |---|---|
-| `transcript.py` | Incremental JSONL parser: calls, tools, pending tools, loop counters, cache TTL |
-| `store.py` | Session discovery, live registry, subagents, state machine, time-bucketed series |
-| `limits.py` | Limit log reader, blind-spot detection, projected/worst/best forecast |
-| `tap.py` | Standalone status-line passthrough and hook recorder (no package imports, fails silent) |
-| `install.py` | Reversible settings.json edits, with a timestamped backup before every write |
-| `draw.py` / `themes.py` | Colour pairs, rounded panels, gradient gauges, block and braille charts |
-| `tui.py` | App loop, the eleven pages, the manual viewer and the first-run prompt |
-| `tasks.py` | Builds the Tasks tree from sessions, subagents, background tasks, processes, jobs |
-| `procs.py` | One `ps` snapshot: claude CLIs, their children (MCP servers, shells), Claude Desktop |
-| `manual.py` | The built-in manual's text |
-| `claudemon.py` | Entry point and command line |
-| `launch.py` | `--window`: opens Terminal / iTerm / Ghostty (or a Linux terminal) titled claudeMon |
-| `utils/make_demo.py` | Generates a synthetic `~/.claude` tree (sessions, subagents, limits with a blind spot) |
-| `utils/grid.py`, `utils/shots.py` | Headless screen capture and the README screenshot renderer (see `utils/README.md`) |
+| `sources/transcript.py` | Incremental JSONL parser: calls, tools, pending tools, loop counters, cache TTL |
+| `sources/store.py` | Session discovery, live registry, subagents, state machine, time-bucketed series |
+| `sources/limits.py` | Limit log reader, blind-spot detection, projected/worst/best forecast |
+| `tap/tap.py` | Standalone status-line passthrough and hook recorder (no package imports, fails silent) |
+| `tap/installer.py` | Reversible settings.json edits, with a timestamped backup before every write |
+| `ui/draw.py` / `ui/themes.py` | Colour pairs, rounded panels, gradient gauges, block and braille charts |
+| `ui/app.py` | App loop, the eleven pages, the manual viewer and the first-run prompt |
+| `ui/tasks.py` | Builds the Tasks tree from sessions, subagents, background tasks, processes, jobs |
+| `sources/procs.py` | One `ps` snapshot: claude CLIs, their children (MCP servers, shells), Claude Desktop |
+| `ui/manual.py` | The built-in manual's text |
+| `cli.py` | Entry point and command line (the root `claudemon.py` runs it from a clone) |
+| `window.py` | `--window`: opens Terminal / iTerm / Ghostty (or a Linux terminal) titled claudeMon |
+| `tools/make_demo.py` | Generates a synthetic `~/.claude` tree (sessions, subagents, limits with a blind spot) |
+| `tools/grid.py`, `tools/shots.py` | Headless screen capture and the README screenshot renderer (see `tools/README.md`) |
 | `tests/test_smoke.py` | Stdlib tests: every page in Unicode and ASCII, graph styles, tap round-trip, CLI |
 
 ### Approximations

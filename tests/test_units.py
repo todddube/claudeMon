@@ -455,6 +455,49 @@ class ModelNames(unittest.TestCase):
             self.assertEqual(store.short_model(raw), want, raw)
 
 
+class PageRegistry(unittest.TestCase):
+    """The page contract: order, titles and keys are what config.json, -p and muscle memory rely on."""
+
+    def test_pages_keep_their_order_titles_keys_and_manual_topics(self):
+        from claudemon.ui import manual
+        from claudemon.ui.pages import PAGES
+        self.assertEqual([p.title for p in PAGES], [
+            "Token burn", "Tasks", "Context", "Prompt cache", "Traffic", "Models", "Session limit", "Weekly limit",
+            "Projects", "Inspect", "Settings"])
+        self.assertEqual("".join(p.key for p in PAGES), "1234567890s")
+        self.assertEqual(len({p.id for p in PAGES}), len(PAGES))
+        topics = [t["id"] for t in manual.TOPICS]
+        for p in PAGES:
+            self.assertTrue(callable(p.render) and callable(p.side), p)
+            self.assertIn(p.manual_topic, topics, p)
+            self.assertEqual(manual.TOPICS[manual.topic_index(p.manual_topic)]["id"], p.manual_topic)
+        self.assertEqual(manual.topic_index("no such topic"), 0)
+
+    def test_page_hooks_route_through_the_app(self):
+        with tempfile.TemporaryDirectory() as home:
+            code = ("import sys; sys.argv=['grid']\nfrom claudemon.ui import headless as g\ng.install()\n"
+                    "from claudemon.ui import app as tui\nfrom claudemon.sources import store\n"
+                    "from claudemon.ui.pages import Page\n"
+                    "seen = []\n"
+                    "def render(ctx, y, x, h, w):\n    ctx.scr.put(y, x, 'dummy page', ctx.T('fg'))\n"
+                    "def side(ctx):\n    return [], 'side %d' % ctx.page_state['dummy']['n'], ''\n"
+                    "def tick(ctx):\n    ctx.page_state['dummy']['n'] += 1\n"
+                    "def on_key(ctx, key, k):\n"
+                    "    if k == 'x':\n        ctx.go_page('inspect', 'sid-1'); return True\n    return False\n"
+                    "tui.PAGES.append(Page('dummy', 'Dummy', 'y', render, side, on_key=on_key, tick=tick,\n"
+                    "                      manual_topic='tools', state=lambda: {'n': 0}))\n"
+                    "st = store.Store(); st.indexed = True\n"
+                    "app = tui.App(g.FakeWin(60, 120), st, {'tap_prompt_seen': True})\n"
+                    "app.tick(force=True); app.tick(force=True); app.on_key('y'); app.draw()\n"
+                    "print(app.pages[app.page].id, app.side_cache['dummy'][1])\n"
+                    "app.on_key('m'); print(app.modal, app.man_i == [t['id'] for t in tui.manual.TOPICS].index('tools'))\n"
+                    "app.on_key('\\x1b'); app.on_key('x'); print(app.pages[app.page].id, app.sel_sid)\n")
+            r = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT), capture_output=True, text=True, timeout=60,
+                               env=dict(os.environ, CLAUDE_CONFIG_DIR=home, CLAUDEMON_DEMO="1", TERM_PROGRAM="none"))
+            self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+            self.assertEqual(r.stdout.split("\n")[:3], ["dummy side 2", "manual True", "inspect sid-1"])
+
+
 class SettingsPage(unittest.TestCase):
     def test_a_malformed_settings_json_is_explained_not_a_page_error(self):
         with tempfile.TemporaryDirectory() as home:

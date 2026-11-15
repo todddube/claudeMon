@@ -12,8 +12,12 @@ ROOT = Path(__file__).resolve().parent.parent
 TAP = ROOT / "src" / "claudemon" / "tap" / "tap.py"
 sys.path.insert(0, str(ROOT / "src"))
 
-PAGES = ["mini", "token", "tasks", "context", "prompt cache", "traffic", "models", "session", "weekly",
-         "projects", "inspect:web shop", "settings", "manual", "manual:tap", "prompt"]
+from claudemon.ui.pages import PAGES as REGISTRY  # noqa: E402
+
+# Every registered page, as the go() string grid.py takes (a title prefix, plus a session for Inspect),
+# then the screens that are not pages.
+PAGES = (["mini"] + [p.title.lower() + (":web shop" if p.id == "inspect" else "") for p in REGISTRY]
+         + ["manual", "manual:tap", "prompt"])
 
 
 def run(*args, env=None, **kw):
@@ -100,6 +104,7 @@ class Pages(unittest.TestCase):
                 g = self.grid(page, ascii_mode=asc)
                 text = "".join(c[0] for row in g["cells"] for c in row)
                 self.assertTrue(text.strip(), page)
+                self.assertNotIn("page error", text, page)
                 if asc:
                     self.assertTrue(text.isascii(), "non-ASCII left on %s" % page)
 

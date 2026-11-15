@@ -222,7 +222,7 @@ claudemon install      # add the tap          claudemon uninstall   # remove it
 | `src/claudemon/core/` | locations, preferences, formatters, which Python the tap and new windows use |
 | `src/claudemon/sources/` | sessions, transcript parsing, limit forecasting, the process snapshot |
 | `src/claudemon/tap/` | the status-line tap (standalone) and its reversible installer |
-| `src/claudemon/ui/` | the interface, drawing primitives, colour themes, the manual text, the Tasks tree |
+| `src/claudemon/ui/` | the interface: the app loop, one module per page in `pages/`, the mini view and modals, drawing primitives, colour themes, the manual text |
 | `pyproject.toml` `uv.lock` | packaging and developer tooling: uv dependency groups, ruff and pytest settings |
 | `tools/` | demo data generator and the screenshot pipeline ([README](tools/README.md)) |
 

@@ -105,6 +105,23 @@ Each page is `Page(id, title, key, render, side, on_key, tick, manual_topic)`.
 - `tasks.py` is page logic, so it moves next to the Tasks page; its `build()` is what the page's
   `tick` hook calls.
 
+**As built (the phase 5 glue):**
+
+- `Page` also takes `state`, a factory for page-only state the App keeps at `ctx.page_state[id]`
+  (Tasks' tree and cursor), so two Apps in one process never share it. `on_key(ctx, key, k)` returns
+  True when it handled the key; `side`, `tick` and `render` take `ctx` first.
+- Navigation is `ctx.go_page(page_id, session=None)`; `App.go(start)` keeps its meaning as the `-p`
+  string (title prefixes, digits, `manual:<prefix>`, `mini`, `prompt`), which the parity adapter,
+  `tools/grid.py` and the smoke tests use.
+- `o` (Token burn's overall view) and `e` (Models' effort split) stay global keys and App state: they
+  toggle from any page today, and the parity key scripts press `e` off the Models page.
+- `ui/tasks.py` became `ui/pages/tasks_tree.py`, beside `ui/pages/tasks.py`, so the page's
+  `fdur` (from `core/fmt`) and the tree's own `fdur` stay apart.
+- The mini view (`ui/mini.py`) and the modals (`ui/modals.py`) moved in the same step, as functions
+  of the App, so no two later units edit the same file. Every Store read the pages need is a Store
+  method (`forecast`, `limit_samples`, `session_count`, `index_status`, `proc`, `cli_procs`,
+  `desktop_procs`, plus the existing queries).
+
 ### Cost of extending
 
 | Add a | Touches |

@@ -111,8 +111,11 @@ Paths are under `src/claudemon/` unless they start with `tools/` or `tests/`.
 | `tap/tap.py` | Standalone status-line passthrough and hook recorder (no package imports, fails silent) |
 | `tap/installer.py` | Reversible settings.json edits, with a timestamped backup before every write |
 | `ui/draw.py` / `ui/themes.py` | Colour pairs, rounded panels, gradient gauges, block and braille charts |
-| `ui/app.py` | App loop, the eleven pages, the manual viewer and the first-run prompt |
-| `ui/tasks.py` | Builds the Tasks tree from sessions, subagents, background tasks, processes, jobs |
+| `ui/app.py` | App loop, header, sidebar and footer, global keys, navigation and the state pages share |
+| `ui/pages/` | One module per page; `__init__.py` holds the `Page` contract and the ordered `PAGES` list |
+| `ui/pages/tasks_tree.py` | Builds the Tasks tree from sessions, subagents, background tasks, processes, jobs |
+| `ui/widgets.py` | Drawing helpers the pages share: charts, key/value cells, toggles, badges, chips, the tap callout |
+| `ui/mini.py` / `ui/modals.py` | The mini view; the help overlay, manual viewer, first-run prompt and too-small guard |
 | `sources/procs.py` | One `ps` snapshot: claude CLIs, their children (MCP servers, shells), Claude Desktop |
 | `ui/manual.py` | The built-in manual's text |
 | `cli.py` | Entry point and command line (the root `claudemon.py` runs it from a clone) |

@@ -9,6 +9,7 @@ from claudemon.core.fmt import fclock, fpct, ftok
 from claudemon.sources.store import IDLE, NEEDS_YOU, WORKING, short_model
 from claudemon.ui.draw import STYLES, clip
 from claudemon.ui.themes import ORDER as THEME_ORDER
+from claudemon.ui import widgets as W
 from claudemon.ui.widgets import STATE_BADGE
 
 MINI_W, MINI_MAX = 74, 10   # mini view: window width, most session rows before "+n more"
@@ -42,10 +43,11 @@ def fit(ctx):
 
 
 def on_key(ctx, key, k):
-    d = 1 if (key == curses.KEY_DOWN or k == "j") else -1 if (key == curses.KEY_UP or k == "k") else 0
+    """The mini view's keys; always True, so no global key runs behind it."""
+    d = W.updown(key, k)
     if d:
         ctx.move(d)
-    elif key in ("\n", "\r", curses.KEY_ENTER):
+    elif W.is_enter(key):
         ctx.go_page("inspect")
         set_mini(ctx, False)
     elif ctx.page_for_key(k):                  # a page key opens that page in the full view
@@ -80,6 +82,7 @@ def on_key(ctx, key, k):
 
 
 def limit(ctx, y, w, key, label):
+    """One gauge row for a limit window: bar, percent, and the full or reset time."""
     scr = ctx.scr
     f = ctx.forecasts.get(key)
     weekly = key == "seven_day"
@@ -107,6 +110,7 @@ def limit(ctx, y, w, key, label):
 
 
 def draw(ctx, h, w):
+    """Header, both limits, burn, one row per session and the footer, in an h x w window."""
     scr = ctx.scr
     if h < 6 or w < 40:
         scr.put(0, 0, "mini needs 40×6 (z for the full view)", ctx.T("warn"))

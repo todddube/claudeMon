@@ -6,6 +6,7 @@ tree under test, with the same inputs and interpreter, and show every difference
     python3 tests/parity/harness.py --candidate baseline  # the pin against itself (stability)
     python3 tests/parity/harness.py --baseline HEAD~1     # a commit against its parent
     python3 tests/parity/harness.py --python /usr/bin/python3 --python python3.13 --repeat 20
+    python3 tests/parity/harness.py --candidate baseline --python /usr/bin/python3 --candidate-python python3.13
 
 Each run checks the baseline out into a fresh `git worktree add --detach` under a
 mktemp directory (never a fixed path, so several runs can share a repository) and
@@ -551,7 +552,7 @@ def one_run(args, python, base_rev, cand):
             worktrees.append(cand_root)
             cand_adapter = ADAPTERS[args.candidate_adapter]
         sides = [Side("baseline", base_root, ADAPTERS["baseline"], run_dir, python),
-                 Side("candidate", cand_root, cand_adapter, run_dir, python)]
+                 Side("candidate", cand_root, cand_adapter, run_dir, args.candidate_python or python)]
         scens = [s for s in scenarios.ALL if not args.only or any(o in s.name for o in args.only)]
         results = {s.name: {} for s in sides}
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
@@ -584,6 +585,8 @@ def main(argv=None):
     p.add_argument("--candidate-adapter", choices=sorted(ADAPTERS), default="baseline",
                    help="adapter for a candidate commit (default: baseline)")
     p.add_argument("--python", action="append", help="interpreter for both sides (repeatable; default: this one)")
+    p.add_argument("--candidate-python", help="run the candidate side on this interpreter instead (the one-off "
+                   "run that lists what already differs between Python versions; not a parity check)")
     p.add_argument("--repeat", type=int, default=1, help="run N times, stopping at the first failure")
     p.add_argument("--only", action="append", help="only scenarios whose name contains this (repeatable)")
     p.add_argument("--jobs", type=int, default=min(8, os.cpu_count() or 2), help="scenarios run at once")
@@ -607,6 +610,8 @@ def main(argv=None):
             for py in pythons:
                 diffs, allowed, n_scen, n_keys, dt = one_run(args, py, base, cand)
                 tag = "run %d/%d %s" % (i + 1, args.repeat, py)
+                if args.candidate_python:
+                    tag += " vs " + args.candidate_python
                 for key, why in allowed:
                     print("  declared delta %s: %s" % (key, why))
                 if diffs:

@@ -9,6 +9,8 @@ python3 tests/parity/harness.py                          # pin (BASELINE) vs the
 python3 tests/parity/harness.py --candidate baseline     # the pin against itself
 python3 tests/parity/harness.py --baseline HEAD~1        # a commit against its parent
 python3 tests/parity/harness.py --python /usr/bin/python3 --python python3.13 --repeat 20
+python3 tests/parity/harness.py --candidate baseline --python /usr/bin/python3 \
+    --candidate-python python3.13                        # what already differs between Pythons (one-off)
 python3 tests/parity/harness.py --list-masks             # every mask and pin
 python3 tests/parity/harness.py --only pty --keep out/   # some scenarios; keep both sides' outputs
 ```

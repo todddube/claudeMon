@@ -292,7 +292,7 @@ class StoreTests(unittest.TestCase):
     def test_sources_registry_builds_and_refreshes_in_order(self):
         with tempfile.TemporaryDirectory() as home:
             code = ("from claudemon import sources\nfrom claudemon.sources import store\n"
-                    "print([n for n, _, _ in sources.SOURCES])\n"
+                    "print([n for n, _, _ in sources.SOURCES][:2])\n"
                     "log = []\n"
                     "class Probe:\n"
                     "    def __init__(self, stage): self.stage = stage\n"
@@ -472,15 +472,17 @@ class ModelNames(unittest.TestCase):
 
 
 class PageRegistry(unittest.TestCase):
-    """The page contract: order, titles and keys are what config.json, -p and muscle memory rely on."""
+    """The page contract: order, titles and keys are what config.json, -p and muscle memory rely on.
+    The built-in pages are frozen; a page added later goes anywhere, with its own key."""
 
     def test_pages_keep_their_order_titles_keys_and_manual_topics(self):
         from claudemon.ui import manual
         from claudemon.ui.pages import PAGES
-        self.assertEqual([p.title for p in PAGES], [
-            "Token burn", "Tasks", "Context", "Prompt cache", "Traffic", "Models", "Session limit", "Weekly limit",
-            "Projects", "Inspect", "Settings"])
-        self.assertEqual("".join(p.key for p in PAGES), "1234567890s")
+        builtin = ["Token burn", "Tasks", "Context", "Prompt cache", "Traffic", "Models", "Session limit",
+                   "Weekly limit", "Projects", "Inspect", "Settings"]
+        self.assertEqual([p.title for p in PAGES if p.title in builtin], builtin)
+        self.assertEqual("".join(p.key for p in PAGES if p.title in builtin), "1234567890s")
+        self.assertEqual(len({p.key for p in PAGES}), len(PAGES))
         self.assertEqual(len({p.id for p in PAGES}), len(PAGES))
         topics = [t["id"] for t in manual.TOPICS]
         for p in PAGES:

@@ -92,6 +92,12 @@ def clip(text, n):
     return text[: max(0, n - 1)] + "…"
 
 
+def footer_msg(text, room):
+    """A flash message as the footer draws it: one line (newlines and runs of spaces folded), clipped
+    to room columns, so a long message is cut short rather than placed off-screen and dropped."""
+    return clip(" ".join((text or "").split()), room)
+
+
 class Screen:
     """Owns colour pairs for the active theme and clips every write to the window."""
 

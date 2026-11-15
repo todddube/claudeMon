@@ -31,10 +31,10 @@ def side(ctx):
 
 PAGES.append(Page("zebra", "Zebra", "x", render, side, manual_topic="Tasks"))
 
-app = make_app(40, 120)
+app = make_app(60, 120)
 t = text(app)
-print("count", len(app.pages), [p.id for p in app.pages[:11]] == before)
-print("last", app.pages[-1].id, app.index_of("zebra"))
+print("count", len(app.pages) - len(before), [p.id for p in app.pages[:len(before)]] == before)
+print("last", app.pages[-1].id, app.index_of("zebra") == len(before))
 print("sidebar", "Zebra" in t, "zline 1" in t, "zline 2" in t)
 key(app, "x")
 t = text(app)
@@ -102,7 +102,7 @@ class Extension(unittest.TestCase):
     def test_a_page_is_one_module_and_one_pages_line(self):
         with tempfile.TemporaryDirectory() as home:
             out = support.ui(PAGE_CODE, home).splitlines()
-        self.assertEqual(out, ["count 12 True", "last zebra 11", "sidebar True True True",
+        self.assertEqual(out, ["count 1 True", "last zebra True", "sidebar True True True",
                                "key zebra True False", "go zebra True", "manual manual True"], out)
 
     def test_a_subcommand_is_one_function_and_one_commands_entry(self):

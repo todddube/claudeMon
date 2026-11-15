@@ -14,11 +14,19 @@ def too_small(ctx):
     return h < 16 or w < 70
 
 
+def page_keys(pages):
+    """The page keys for the help overlay: "1-9 0 s" for the built-in pages, plus any added ones."""
+    keys = "".join(p.key for p in pages)
+    if keys.startswith("1234567890"):
+        return " ".join(["1-9 0"] + list(keys[10:]))
+    return " ".join(keys)
+
+
 def draw_help(ctx, h, w):
     lines = [
         "claudeMon — a task manager for Claude Code",
         "",
-        "1-9 0 s    jump to a page          ← → / Tab  previous / next page",
+        "%-10s jump to a page          ← → / Tab  previous / next page" % page_keys(ctx.pages),
         "↑ ↓  j k   select a session        ⏎          inspect the selected session",
         "g / G      graph range 5m…24h      o          overall vs per-session (burn)",
         "e          model · effort split    a          include finished sessions",

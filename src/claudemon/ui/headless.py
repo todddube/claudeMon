@@ -34,6 +34,8 @@ class FakeWin:
         self.g = [[(" ", self.bg)] * self.cols for _ in range(self.rows)]
 
     def addstr(self, y, x, text, attr=0):
+        if not (0 <= y < self.rows and 0 <= x < self.cols) or "\n" in text:
+            raise curses.error("addstr() returned ERR")     # as real curses does for these
         for i, ch in enumerate(text):
             if 0 <= y < self.rows and 0 <= x + i < self.cols:
                 self.g[y][x + i] = (ch, attr)

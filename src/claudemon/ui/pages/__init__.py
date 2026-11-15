@@ -1,4 +1,4 @@
-"""The pages, in sidebar order. Adding a page is one module plus one PAGES line.
+"""The pages, in sidebar order. Adding a page is one module, one PAGES line and one manual topic.
 
 Every function a page provides takes the App as its first argument, `ctx`:
 

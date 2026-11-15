@@ -7,7 +7,7 @@ from datetime import datetime
 
 from claudemon.core.fmt import fclock, fpct, ftok
 from claudemon.sources.store import IDLE, NEEDS_YOU, WORKING, short_model
-from claudemon.ui.draw import STYLES, clip
+from claudemon.ui.draw import STYLES, clip, footer_msg
 from claudemon.ui.themes import ORDER as THEME_ORDER
 from claudemon.ui import widgets as W
 from claudemon.ui.widgets import STATE_BADGE
@@ -196,12 +196,13 @@ def draw(ctx, h, w):
         scr.put(y, 3, "+%d more (z for the full view)" % (len(sessions) - len(shown)), ctx.T("dim"))
 
     fy = h - 1
-    msg = ctx.flash or ("" if ctx.tap_ok else "⚡ tap off: I I")
+    msg = footer_msg(ctx.flash, w - 4) or ("" if ctx.tap_ok else "⚡ tap off: I I")
     x = 1
     for key, label in (("z", "full"), ("q", "quit"), ("↑↓", "select"), ("⏎", "inspect"), ("1-0", "page"), ("t", "theme")):
         if x + len(key) + len(label) + 3 > w - len(msg) - 2:
             break
         x += scr.put(fy, x, key, ctx.T("accent"), extra=curses.A_BOLD)
         x += scr.put(fy, x, " %s  " % label, ctx.T("dim"))
+    msg = footer_msg(msg, w - x - 2)
     if msg:
         scr.put(fy, w - len(msg) - 2, msg, ctx.T("info") if ctx.flash else ctx.T("warn"))

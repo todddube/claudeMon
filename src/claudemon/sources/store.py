@@ -16,7 +16,7 @@ import re
 import threading
 import time
 
-from claudemon.sources import SOURCES
+from claudemon import sources as _registry    # read at use time: a source module may import this one
 from claudemon.sources.limits import compact as compact_limits
 from claudemon.core.paths import JOBS_DIR, PROJECTS_DIR, SCHEDULED_DIR, SESSIONS_DIR, STATUS_DIR
 from claudemon.sources.transcript import Transcript, Usage
@@ -209,7 +209,7 @@ class Session:
 class Store:
     def __init__(self):
         self.sessions = {}
-        for name, factory, _ in SOURCES:      # store.procs, store.limits, ...
+        for name, factory, _ in _registry.SOURCES:      # store.procs, store.limits, ...
             setattr(self, name, factory())
         self.lock = threading.RLock()
         self.indexed = False
@@ -330,7 +330,7 @@ class Store:
             self.tap_seen = True
 
     def _refresh_sources(self, stage):
-        for name, _, when in SOURCES:
+        for name, _, when in _registry.SOURCES:
             if when == stage:
                 try:
                     getattr(self, name).refresh()

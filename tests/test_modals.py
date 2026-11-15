@@ -10,6 +10,7 @@ import support  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from claudemon.ui import manual  # noqa: E402
+from claudemon.ui.pages import PAGES  # noqa: E402
 
 
 class ManualData(unittest.TestCase):
@@ -56,7 +57,7 @@ class Modals(unittest.TestCase):
             "    print(p.id, app.modal, manual.TOPICS[app.man_i]['id'] == p.manual_topic)\n"
             "    key(app, 'm')\n", self.home)
         rows = [ln.split() for ln in out.strip().split("\n")]
-        self.assertEqual(len(rows), 11, out)
+        self.assertEqual(len(rows), len(PAGES), out)
         for r in rows:
             self.assertEqual(r[-2:], ["manual", "True"], r)
 

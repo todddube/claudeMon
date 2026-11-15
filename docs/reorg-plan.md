@@ -129,7 +129,7 @@ Each page is `Page(id, title, key, render, side, on_key, tick, manual_topic)`.
 
 | Add a | Touches |
 |---|---|
-| Page | One module + one `PAGES` line |
+| Page | One module + one `PAGES` line + one manual topic in `ui/manual.py` |
 | Subcommand | One function + one `COMMANDS` entry |
 | Data source | One module + one `SOURCES` entry |
 

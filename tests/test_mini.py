@@ -110,14 +110,28 @@ class MiniKeys(unittest.TestCase):
 
     def test_each_page_key_opens_that_page_in_the_full_view(self):
         out = support.ui(
+            "print(len(tui.PAGES))\n"
             "for p in tui.PAGES:\n"
             "    app = make_app(12, 74, mini=True)\n"
             "    key(app, p.key)\n"
             "    print(p.key, p.id, app.mini, app.pages[app.page].id)\n", self.home)
-        rows = [line.split() for line in lines(out)]
-        self.assertEqual(len(rows), 11, out)
+        count, *rest = lines(out)
+        rows = [line.split() for line in rest]
+        self.assertEqual(len(rows), int(count), out)
         for key, pid, mini, opened in rows:
             self.assertEqual((mini, opened), ("False", pid), "key %s: %s" % (key, out))
+
+    def test_an_install_warning_shows_as_one_line_in_both_footers(self):
+        """The tap's interpreter warning reaches the TUI footer clipped to one line, never dropped."""
+        for rows, cols, mini in ((40, 160, False), (40, 100, False), (12, 74, True)):
+            with tempfile.TemporaryDirectory() as home:
+                out = support.ui(
+                    "from claudemon.tap import installer as install\n"
+                    "install.tap_choice = lambda *a: ('/opt/x/bin/python3.13', 'it can vanish')\n"
+                    "app = make_app(%d, %d, mini=%r)\n"
+                    "key(app, 'I', 'I')\n"
+                    "print(text(app).split(chr(10))[-1])\n" % (rows, cols, mini), home)
+                self.assertIn("tap installed, but on /opt/x", out, (rows, cols, out))
 
     def test_m_and_question_mark_leave_mini_for_the_manual_and_help(self):
         out = support.ui(

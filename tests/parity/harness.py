@@ -76,6 +76,10 @@ MASKS = [
 DELTAS = {
     "window/*": ("--window relaunches through self_command() and no longer does `cd ROOT`",
                  r"cd <ROOT> && ", ""),
+    "keys-mini-install/*": ("a flash wider than the footer is clipped to fit; the pin drew it from a negative x, "
+                            "which only the headless window accepts (real curses drew nothing)",
+                            r"\"alled: limits and 'needs you' are live from the next status-line refresh\"",
+                            "\"  tap installed: limits and 'needs you' are live from the next status-l…\""),
 }
 
 

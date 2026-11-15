@@ -43,7 +43,7 @@ entry to each from test code that only appends, so the recipes below are tested,
 
 | Add a | Touches |
 |---|---|
-| Page | One module in `ui/pages/` and one line in `ui/pages/__init__.py` |
+| Page | One module in `ui/pages/`, one line in `ui/pages/__init__.py` and one topic in `ui/manual.py` |
 | Subcommand | One function and one entry in `commands.py` |
 | Data source | One module in `sources/` and one line in `sources/__init__.py` |
 
@@ -69,8 +69,10 @@ PAGE = Page("fleet", "Fleet", "f", render, side, manual_topic="Fleet")
 ```
 
 Add `from claudemon.ui.pages import ... fleet ...` and a `fleet.PAGE` line to `PAGES`. The position in
-the list is the position in the sidebar. Add a manual topic with the same id to `ui/manual.py`
-(an unknown `manual_topic` opens the Welcome chapter). Use a key no global binding takes.
+the list is the position in the sidebar. Add a manual topic with the same id to `ui/manual.py`:
+`tests/test_units.py` requires every page's `manual_topic` to exist (at run time an unknown one opens the
+Welcome chapter). Use a key no global binding takes and no other page uses; the help overlay lists page
+keys from `PAGES`, and the tests that walk every page count `PAGES` rather than a fixed number.
 
 ### Add a subcommand
 

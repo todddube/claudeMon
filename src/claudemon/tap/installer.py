@@ -370,7 +370,9 @@ def repair():
         return "tap repair failed: %s" % e
 
 
-def install():
+def install(brief=False):
+    """Install the tap and say what happened. brief=True keeps the answer to one short line, for the
+    TUI footer (the CLI prints the full text, warning and all, on its own line)."""
     (loaded, err) = _load_or_message()
     if err:
         return err
@@ -390,8 +392,10 @@ def install():
         return "tap already installed; re-pointed at " + str(TAP)
     msg = "tap installed: limits and 'needs you' are live from the next status-line refresh"
     if not (st["statusline"] or st["hook"]):
-        warn = tap_choice()[1]
-        if warn:
+        py, warn = tap_choice()
+        if warn and brief:
+            msg = "tap installed, but on %s, which can vanish: install the system Python" % py
+        elif warn:
             msg += "\nwarning: " + warn
     return msg
 

@@ -18,7 +18,7 @@ from claudemon.ui import mini as mini_view
 from claudemon.ui import modals
 from claudemon.ui.pages import PAGES
 from claudemon import __version__
-from claudemon.ui.draw import STYLE_NOTE, STYLES, Screen, clip, detect_ascii, set_ascii
+from claudemon.ui.draw import STYLE_NOTE, STYLES, Screen, clip, detect_ascii, footer_msg, set_ascii
 from claudemon.sources.limits import WINDOWS
 from claudemon.sources.store import IDLE, NEEDS_YOU, WORKING, Store
 from claudemon.ui.themes import ORDER as THEME_ORDER
@@ -437,6 +437,7 @@ class App:
         scr = self.scr
         keys = [("1-0", "pages"), ("z", "mini"), ("←→", "page"), ("↑↓", "select"), ("⏎", "inspect"), ("g", "range"),
                 ("o", "overall"), ("a", "all"), ("t", "theme"), ("u", "update"), ("m", "manual"), ("?", "help"), ("q", "quit")]
+        msg = footer_msg(self.flash, w - 4) or ("claudeMon v%s" % __version__)
         x = 1
         if not self.tap_ok:
             x += W.chip(self, y, x, " ⚡ I install tap ", "warn") + 2
@@ -445,7 +446,6 @@ class App:
                 break
             x += scr.put(y, x, k, self.T("accent"), extra=curses.A_BOLD)
             x += scr.put(y, x, " %s  " % label, self.T("dim"))
-        msg = self.flash or ("claudeMon v%s" % __version__)
         scr.put(y, w - len(msg) - 2, msg, self.T("info") if self.flash else self.T("border"))
 
     # ── window ─────────────────────────────────────────────────────────────
@@ -468,7 +468,7 @@ class App:
 
     def do_install(self):
         try:
-            self.flash = install.install()
+            self.flash = install.install(brief=True)
         except Exception as e:
             self.flash = "install failed: %s" % e
         self.tap_ok = install.installed()

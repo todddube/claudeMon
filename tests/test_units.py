@@ -322,10 +322,10 @@ class StoreTests(unittest.TestCase):
 
 
 class TuiInput(unittest.TestCase):
-    """Drives tui.App with the fake curses window from utils/grid.py."""
+    """Drives tui.App with the fake curses window from headless.py."""
 
     def run_py(self, code, home):
-        r = subprocess.run([sys.executable, "-c", "import sys; sys.argv=['grid']\nimport utils.grid as g\n" + code],
+        r = subprocess.run([sys.executable, "-c", "import sys; sys.argv=['grid']\nimport headless as g\ng.install()\n" + code],
                            cwd=str(ROOT), capture_output=True, text=True, timeout=60,
                            env=dict(os.environ, CLAUDE_CONFIG_DIR=home, CLAUDEMON_DEMO="1", TERM_PROGRAM="none"))
         self.assertEqual(r.returncode, 0, r.stderr[-2000:])
@@ -456,6 +456,29 @@ class LaunchSize(unittest.TestCase):
         self.assertEqual(launch.parse_size("150x46"), ("150", "46"))
         for bad in ('1" & (do shell script "x") & "x5', "150", "x46", "150x46 ", ""):
             self.assertIsNone(launch.parse_size(bad), bad)
+
+
+class Headless(unittest.TestCase):
+    def test_importing_headless_leaves_curses_alone_until_install(self):
+        code = ("import curses, headless\n"
+                "assert not hasattr(curses, 'COLORS') or curses.COLORS != 256\n"
+                "headless.install()\n"
+                "assert curses.COLORS == 256 and curses.color_pair(3) == 3 << 24\n"
+                "print('ok')\n")
+        r = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT), capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.stdout.strip(), "ok", r.stderr[-500:])
+
+
+class Fmt(unittest.TestCase):
+    def test_formatters_and_the_command_modules_do_not_import_the_tui(self):
+        import fmt
+        self.assertEqual(fmt.ftok(1234), "1.23k")
+        self.assertEqual(fmt.fdur(3700), "1h01m")
+        self.assertEqual(fmt.fpct(.5), "50%")
+        self.assertEqual(fmt.fpct(None), "—")
+        r = subprocess.run([sys.executable, "-c", "import sys, commands, fmt, store; assert 'tui' not in sys.modules"],
+                           cwd=str(ROOT), capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr[-500:])
 
 
 if __name__ == "__main__":

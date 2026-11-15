@@ -358,7 +358,7 @@ class TuiInput(unittest.TestCase):
                 "            {'page': 'x', 'page_name': 'Tasks'}, {'page': True}):\n"
                 "    app = tui.App(g.FakeWin(40, 120), st, dict(cfg, tap_prompt_seen=True))\n"
                 "    app.tick(force=True); app.draw()\n"
-                "    print(app.pages[app.page][0], app.interval, app.span)\n"
+                "    print(app.pages[app.page].title, app.interval, app.span)\n"
                 "for k in ('²', '٣', '0', '9', '1'):\n"
                 "    app.on_key(k)\n"
                 "    print(repr(k), app.page)\n"

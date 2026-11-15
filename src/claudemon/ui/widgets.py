@@ -18,6 +18,15 @@ STATE_BADGE = {
 }
 
 
+def updown(key, k):
+    """1 for ↓ or j, -1 for ↑ or k, else 0."""
+    return 1 if (key == curses.KEY_DOWN or k == "j") else -1 if (key == curses.KEY_UP or k == "k") else 0
+
+
+def is_enter(key):
+    return key in ("\n", "\r", curses.KEY_ENTER)
+
+
 def grad_fn(ctx):
     return lambda frac: ctx.scr.grad_color(frac)
 

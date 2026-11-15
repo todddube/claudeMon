@@ -62,7 +62,7 @@ class Adapter:
 
     def state(self, app):
         """What a user could see changed by a key: the page, the view and the open modal."""
-        return {"page": app.pages[app.page][0], "mini": bool(app.mini), "modal": app.modal, "flash": app.flash}
+        return {"page": app.pages[app.page].title, "mini": bool(app.mini), "modal": app.modal, "flash": app.flash}
 
     # installer
     def repair(self):

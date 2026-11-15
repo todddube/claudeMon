@@ -254,8 +254,9 @@ TOPICS = [
 ]
 
 
-def topic_for_page(title):
+def topic_index(topic_id):
+    """The index of the topic with this id (a page's manual_topic), or 0 (Welcome)."""
     for i, t in enumerate(TOPICS):
-        if t.get("page") == title:
+        if t["id"] == topic_id:
             return i
     return 0

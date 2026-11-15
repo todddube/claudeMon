@@ -3,9 +3,11 @@
 The root claudemon.py is a wrapper: run, it starts the CLI; imported as `claudemon`, it replaces
 itself in sys.modules with the real package. Two module objects for one file would split globals
 such as draw.ascii_mode, so each route checks where `claudemon` came from. The wheel half builds and
-installs the wheel when uv is available (CI's wheel job), and is skipped otherwise."""
+installs the wheel when uv is available (CI's wheel job), and is skipped otherwise. The brew half checks
+Formula/claudemon.rb statically, and runs tools/brew-check.sh only when CLAUDEMON_BREW_CHECK=1."""
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -186,6 +188,57 @@ class Wheel(unittest.TestCase):
         r = subprocess.run([str(self.py), "-m", "claudemon", "--version"], cwd=str(self.tmp), env=self.env(),
                            capture_output=True, text=True, timeout=60)
         self.assertEqual(r.stdout.strip(), "claudemon " + version(), r.stderr)
+
+
+FORMULA = ROOT / "Formula" / "claudemon.rb"
+
+
+class Formula(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.text = FORMULA.read_text()
+
+    def test_class_and_virtualenv(self):
+        self.assertRegex(self.text, r"(?m)^class C[l]audemon < Formula$")  # spelled so test_naming does not flag this file
+        self.assertIn("include Language::Python::Virtualenv", self.text)
+        self.assertIn("virtualenv_install_with_resources", self.text)
+
+    def test_desc_does_not_start_with_the_name_or_an_article(self):
+        desc = re.search(r'(?m)^  desc "([^"]+)"$', self.text).group(1)
+        self.assertFalse(re.match(r"(?i)(claude ?mon|a|an|the)\b", desc), desc)
+
+    def test_homepage_and_head_are_the_github_repo(self):
+        self.assertIn('homepage "https://github.com/todddube/claudeMon"', self.text)
+        self.assertIn('head "https://github.com/todddube/claudeMon.git", branch: "main"', self.text)
+
+    def test_license_matches_pyproject(self):
+        m = re.search(r'(?m)^license = "([^"]+)"', (ROOT / "pyproject.toml").read_text())
+        self.assertIn('license "%s"' % m.group(1), self.text)
+
+    def test_python_and_the_setuptools_resource(self):
+        self.assertIn('depends_on "python@3.14"', self.text)
+        res = re.search(r'resource "setuptools" do(.*?)\n  end', self.text, re.S)
+        self.assertTrue(res, "no setuptools resource")
+        self.assertRegex(res.group(1), r'url "https://files\.pythonhosted\.org/[^"]+/setuptools-[^"/]+\.tar\.gz"')
+        self.assertRegex(res.group(1), r'sha256 "[0-9a-f]{64}"')
+
+    def test_caveats(self):
+        caveats = re.search(r"def caveats(.*?)\n  end", self.text, re.S).group(1)
+        for needle in ("claudemon install", "claudemon uninstall", "brew upgrade --fetch-HEAD claudemon"):
+            self.assertIn(needle, caveats)
+
+    def test_test_block_runs_version_without_touching_the_real_home(self):
+        block = re.search(r"\n  test do(.*?)\n  end", self.text, re.S).group(1)
+        self.assertIn('shell_output("#{bin}/claudemon --version")', block)
+        self.assertLess(block.index("CLAUDE_CONFIG_DIR"), block.index("shell_output"))
+        self.assertIn("testpath", block)
+
+    @unittest.skipUnless(os.environ.get("CLAUDEMON_BREW_CHECK") == "1" and shutil.which("brew"),
+                         "set CLAUDEMON_BREW_CHECK=1 with brew on PATH to install the formula from this checkout")
+    def test_brew_check_script(self):
+        r = subprocess.run(["bash", str(ROOT / "tools" / "brew-check.sh")], capture_output=True, text=True, timeout=1200)
+        self.assertEqual(r.returncode, 0, (r.stdout + r.stderr)[-3000:])
+        self.assertIn("brew-check: ok", r.stdout)
 
 
 if __name__ == "__main__":

@@ -168,6 +168,7 @@ class Install(Home):
             self.assertEqual(self.settings.read_text(), bad)
             self.assertEqual(self.py("import install; print(install.installed(), repr(install.repair()))"), "False ''")
 
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root writes through a 0o500 folder (Linux CI containers)")
     def test_unwritable_settings_gives_a_message(self):
         self.write({})
         os.chmod(self.home, 0o500)

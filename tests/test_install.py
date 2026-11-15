@@ -284,14 +284,14 @@ class Tap(Home):
         for pct in (38, 28, 29, 38, 30, 39, 38, 39):
             self.tap("statusline", stdin=json.dumps({"session_id": "s%d" % pct, "rate_limits": {
                 "seven_day": {"used_percentage": pct, "resets_at": 1795000000}}}))
-        rows = [json.loads(l) for l in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
+        rows = [json.loads(ln) for ln in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
         self.assertEqual([r["seven_day"]["pct"] for r in rows], [38, 39])
 
     def test_without_resets_at_a_drop_is_still_logged(self):
         """Review: with no resets_at every later reading counted as the same window."""
         for pct in (90, 3):
             self.tap("statusline", stdin=json.dumps({"session_id": "a", "rate_limits": {"five_hour": {"used_percentage": pct}}}))
-        rows = [json.loads(l) for l in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
+        rows = [json.loads(ln) for ln in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
         self.assertEqual([r["five_hour"]["pct"] for r in rows], [90, 3])
 
     def test_an_idle_session_on_the_previous_window_is_stale(self):
@@ -300,7 +300,7 @@ class Tap(Home):
             for pct, resets in ((95, 1795000000), (4, 1795018000)):
                 self.tap("statusline", stdin=json.dumps({"session_id": "s%d" % pct, "rate_limits": {
                     "five_hour": {"used_percentage": pct, "resets_at": resets}}}))
-        rows = [json.loads(l) for l in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
+        rows = [json.loads(ln) for ln in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
         self.assertEqual([r["five_hour"]["pct"] for r in rows], [95, 4])
 
     def test_a_new_window_is_logged_even_when_lower(self):

@@ -602,13 +602,13 @@ class App:
             "⚡ Limits, cost and alerts need the tap: press I twice, or run `claudemon install`.",
             "Everything else is read from ~/.claude transcripts. No tokens are used.",
         ]
-        bw = min(w - 4, max(len(l) for l in lines) + 6)
+        bw = min(w - 4, max(len(ln) for ln in lines) + 6)
         bh = len(lines) + 4
         y, x = (h - bh) // 2, (w - bw) // 2
         self.scr.fill(y, x, bh, bw, self.T("hl_bg"))
         self.scr.box(y, x, bh, bw, "Help", focus=True)
-        for i, l in enumerate(lines):
-            self.scr.put(y + 2 + i, x + 3, l, self.T("title") if i == 0 else self.T("fg"), self.T("hl_bg"))
+        for i, ln in enumerate(lines):
+            self.scr.put(y + 2 + i, x + 3, ln, self.T("title") if i == 0 else self.T("fg"), self.T("hl_bg"))
 
     # ── mini view ──────────────────────────────────────────────────────────
     def resize(self, rows, cols):

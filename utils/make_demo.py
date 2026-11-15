@@ -206,7 +206,9 @@ def make_limits(sids):
         sum_day[k] = sum_day.get(k, 0) + b
         w = int((r5 - t) // (5 * H))
         sum_win[w] = sum_win.get(w, 0) + b
-    win_target = lambda w: 74 if w == 0 else 55 if w == 1 else 50
+    def win_target(w):
+        return 74 if w == 0 else 55 if w == 1 else 50
+
     rows, c7, c5 = [], 0.0, {}
     jumped = False
     for t, k, b in steps:

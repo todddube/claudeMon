@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import unittest
 from pathlib import Path
@@ -183,7 +182,7 @@ class Limits(TempFiles):
                         {"ts": now - 60, "seven_day": {"pct": 2}}))
         self.assertFalse(limits.compact(p, min_bytes=1 << 20))
         self.assertTrue(limits.compact(p, min_bytes=1))
-        self.assertEqual([json.loads(l)["seven_day"]["pct"] for l in p.read_text().splitlines()], [2])
+        self.assertEqual([json.loads(ln)["seven_day"]["pct"] for ln in p.read_text().splitlines()], [2])
 
     def test_old_observations_are_dropped_from_memory(self):
         now = time.time()

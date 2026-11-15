@@ -42,7 +42,7 @@ def cmd_loops(args):
 
 def cmd_snapshot(args):
     from store import Store, short_model
-    from tui import fpct, ftok
+    from fmt import fpct, ftok
     store = Store()
     store.index()
     store.refresh()

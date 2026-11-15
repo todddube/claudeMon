@@ -30,7 +30,7 @@ def main():
     store = Store()
     store.start()
     for _ in range(100):
-        if store.indexed:
+        if store.index_status()[0]:
             break
         time.sleep(.1)
     draw.set_ascii(draw.detect_ascii())

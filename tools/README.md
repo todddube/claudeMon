@@ -7,6 +7,7 @@ Everything here is for development. claudeMon itself never imports it.
 | `make_demo.py` | Writes a fake `~/.claude` tree (sessions, subagents, jobs, limits) with timestamps relative to now |
 | `grid.py` | Runs claudeMon headless on a fake curses and prints its screen as JSON |
 | `shots.py` | Renders the README screenshots: demo data, then grid, then HTML, then headless Chrome, then a resize and shrink |
+| `brew-check.sh` | Tests the Homebrew formula against this checkout on a Mac with Homebrew; CI's `brew` job runs it |
 
 ## How a screenshot is made
 

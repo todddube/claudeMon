@@ -122,21 +122,28 @@ class Wheel(unittest.TestCase):
     def setUpClass(cls):
         cls._tmp = tempfile.TemporaryDirectory()
         cls.tmp = Path(cls._tmp.name)
-        r = subprocess.run(["uv", "build", "--wheel", "-q", "-o", str(cls.tmp / "dist"), str(ROOT)],
-                           capture_output=True, text=True, timeout=300)
-        if r.returncode:
-            cls._tmp.cleanup()
-            raise AssertionError("uv build failed: " + r.stderr[-2000:])
-        cls.wheel = next((cls.tmp / "dist").glob("*.whl"))
+        # Build from a copy, so setuptools' build/ and egg-info never land in the checkout.
+        src = cls.tmp / "src-copy"
+        src.mkdir()
+        for name in ("pyproject.toml", "README.md", "LICENSE", "claudemon.py", "tap.py"):
+            shutil.copy2(str(ROOT / name), str(src / name))
+        shutil.copytree(str(ROOT / "src"), str(src / "src"), ignore=shutil.ignore_patterns("__pycache__", "*.egg-info"))
         venv = cls.tmp / "venv"
-        subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True, capture_output=True, timeout=300)
         cls.py = venv / "bin" / "python"
-        r = subprocess.run([str(cls.py), "-m", "pip", "install", "-q", "--no-index", "--no-deps", str(cls.wheel)],
-                           capture_output=True, text=True, timeout=300)
+        cls.bin = venv / "bin" / "claudemon"
+        cls.uv("build", "--wheel", "-q", "-o", str(cls.tmp / "dist"), str(src))
+        cls.wheel = next((cls.tmp / "dist").glob("*.whl"))
+        # uv for the venv too: Debian's and Ubuntu's system Pythons have no ensurepip.
+        cls.uv("venv", "-q", "--python", sys.executable, str(venv))
+        cls.uv("pip", "install", "-q", "--python", str(cls.py), "--no-deps", str(cls.wheel))
+
+    @classmethod
+    def uv(cls, *args):
+        env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+        r = subprocess.run(["uv"] + list(args), capture_output=True, text=True, timeout=300, env=env)
         if r.returncode:
             cls._tmp.cleanup()
-            raise AssertionError("pip install failed: " + r.stderr[-2000:])
-        cls.bin = venv / "bin" / "claudemon"
+            raise AssertionError("uv %s failed: %s" % (args[0], r.stderr[-2000:]))
 
     @classmethod
     def tearDownClass(cls):

@@ -1,6 +1,6 @@
 # claudeMon reorganization plan
 
-Status: proposed, not started. Revised after the Fable review of 815b5bb; every finding is folded in
+Status: built on joe/reorganize-plan; not pushed. Revised after the Fable review of 815b5bb; every finding is folded in
 below. The goal is a layout that is easy to extend, installable with Homebrew, and proven to behave the
 same as today on macOS and Linux, apart from a short list of [declared deltas](#declared-deltas).
 
@@ -583,6 +583,14 @@ the parity harness on the Mac and on BOSS. PR boundaries are cut later from the 
    are open.
 4. **Brew.** Formula, `tools/brew-check.sh`, the brew half of `test_packaging`, both CI brew jobs,
    README install routes.
+
+   **As built (phase 4):** setuptools is a formula `resource`, the build backend, because the formula
+   builds without network isolation and `pyproject.toml` needs `setuptools>=77`. Homebrew 7 refuses an
+   untrusted tap, but a fully qualified `brew install --HEAD todddube/claudemon/claudemon` works without
+   `brew trust`, so the README needs no extra step; `brew test`, `brew style` and `brew audit` do need
+   it, and `tools/brew-check.sh` runs `brew trust` for its taps (see RELEASING.md). The script clones
+   the checkout and installs from a local tap whose head is a branch of the clone, instead of
+   branching the checkout itself.
 5. **Pages.** First the glue: the `Page` contract, `ctx`, `PAGES`, `widgets.py` (the App's chart,
    kv, toggles, badge, chip and callout helpers), the `SOURCES` registry, and the new tree's parity
    adapter. It is proven on one simple page (Traffic: no page-only state, no navigation), then on the
@@ -591,6 +599,14 @@ the parity harness on the Mac and on BOSS. PR boundaries are cut later from the 
 6. **Seams and docs.** Pages read only through `Store` methods (`test_boundaries` gains that rule);
    then `test_extension`, `ARCHITECTURE.md` with the three extension recipes, a naming pass over
    README and docs, and the harness's retirement.
+
+   **As built (phase 6):** the `StoreSeams` rule in `tests/test_boundaries.py` requires every
+   `<x>.store.<name>` in `ui/` and `commands.py` to name a public `Store` method, and limits `ui/`
+   imports from `claudemon.sources`. `tests/test_extension.py` adds a page, a subcommand and a data
+   source by one line each in `PAGES`, `COMMANDS` and `SOURCES`. `docs/ARCHITECTURE.md` holds the
+   three recipes and `docs/RELEASING.md` the release and brew steps. `tests/support.py` holds the
+   shared headless UI helpers. The harness's retirement is deferred until the pushed PR's CI parity
+   jobs pass on macOS and Linux.
 
 **Stop after phase 6**, when every row in [Goals and stop line](#goals-and-stop-line) has a passing check.
 

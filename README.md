@@ -20,7 +20,7 @@ cd claudeMon
 ./claudemon.py
 ```
 
-No dependencies and no build step (`requirements.txt` is intentionally empty: standard library only).
+No dependencies and no build step: standard library only. (`pyproject.toml` holds only the developer tooling config.)
 
 ## Run
 
@@ -211,7 +211,8 @@ claudemon install      # add the tap          claudemon uninstall   # remove it
 | `store.py` `transcript.py` `limits.py` | sessions, transcript parsing, limit forecasting |
 | `tasks.py` `procs.py` | the Tasks tree and the process snapshot |
 | `tap.py` `install.py` | the status-line tap and its reversible installer |
-| `manual.py` `launch.py` `config.py` `paths.py` | manual text, window launcher, preferences, locations |
+| `manual.py` `launch.py` `runtime.py` `config.py` `paths.py` | manual text, window launcher, which Python the tap and new windows use, preferences, locations |
+| `pyproject.toml` `uv.lock` | developer tooling: uv dependency groups, ruff and pytest settings |
 | `utils/` | demo data generator and the screenshot pipeline ([README](utils/README.md)) |
 
 See [SPEC.md](SPEC.md) for the analysis of Himamushi, the data sources and the design.
@@ -226,14 +227,16 @@ screenshots above use synthetic demo data, never real sessions.
 ## Tests
 
 ```sh
-python3 -m unittest -v
+python3 -m unittest -v     # from a clone, standard library only
+uv run pytest              # everyday runner (uv installs pytest and ruff from the dev group)
+uv run ruff check          # lint
 ```
 
-Standard library only, about 15 seconds. `test_smoke.py` renders every page (Unicode and ASCII, plus a tiny
+About 15 seconds. `test_smoke.py` renders every page (Unicode and ASCII, plus a tiny
 terminal) from the demo data and checks the CLI on an empty home. `test_install.py` round-trips the tap
 install against throwaway config directories (odd `settings.json` shapes, symlinks, a checkout path with a
 space, older installs). `test_units.py` feeds malformed and real-shaped records to the parsers, the limit
-forecast, the process classifier and the TUI's key handling. CI runs them on macOS with Python 3.9 and 3.13.
+forecast, the process classifier and the TUI's key handling. `test_tap_python.py` covers which Python the tap bakes and how `--window` starts claudeMon again. CI runs them on macOS and Linux with Python 3.9 and 3.13, plus ruff.
 
 ## Regenerating the screenshots
 

@@ -6,7 +6,6 @@ Everything here is for development. claudeMon itself never imports it.
 |---|---|
 | `make_demo.py` | Writes a fake `~/.claude` tree (sessions, subagents, jobs, limits) with timestamps relative to now |
 | `grid.py` | Runs claudeMon headless on a fake curses and prints its screen as JSON |
-| `requirements.txt` | Pillow, the one optional Python package (see the file for the non-pip tools) |
 | `shots.py` | Renders the README screenshots: demo data, then grid, then HTML, then headless Chrome, then a resize and shrink |
 
 ## How a screenshot is made
@@ -43,7 +42,7 @@ python3 utils/shots.py tasks theme-nord   # only these, by name
 ```
 
 Requirements: Python 3, Chrome/Chromium/Edge, macOS `sips` (optional, for the resize) and Pillow (optional,
-for the shrink). `pip install -r utils/requirements.txt` installs Pillow; the browser and `sips` are noted there.
+for the shrink). `uv sync --group shots` installs Pillow; Chrome (set `CHROME=/path/to/browser` to choose one) and `sips` are not installable with pip.
 
 ### Try the demo data yourself
 

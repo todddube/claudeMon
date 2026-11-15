@@ -1,0 +1,34 @@
+# Tool configuration only, while the tree is flat: no [build-system] and no script entry yet, so uv
+# treats this as a virtual project and installs just the dependency groups. Packaging arrives with
+# the move to src/claudemon/.
+[project]
+name = "claudeMon"
+requires-python = ">=3.9"
+dynamic = ["version"]
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+shots = ["pillow>=9.1"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+target-version = "py39"
+extend-exclude = ["images"]
+
+[tool.ruff.lint]
+# The default rules: E4, E7, E9, F. No E501 (draw.py's glyph tables are long), no import sorting, no
+# `ruff format` and no pyupgrade (the code uses %-formatting throughout): lint only, so there is no
+# reformatting diff. If UP is ever enabled, tap.py stays exempt, below.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# The tap runs on the system Python and imports nothing, so it keeps the oldest syntax on purpose.
+"tap.py" = ["UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"
+pythonpath = ["."]

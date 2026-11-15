@@ -60,6 +60,28 @@ jobs:
       - name: Tests
         run: python -m unittest -v
 
+  # The wheel: build it, install it into a clean venv, run the entry point; test_packaging's wheel half.
+  wheel:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - name: Build
+        run: uv build --wheel -o dist
+      - name: Install and run
+        run: |
+          uv venv "$RUNNER_TEMP/venv"
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" --no-deps dist/*.whl
+          cd "$RUNNER_TEMP" && CLAUDE_CONFIG_DIR="$RUNNER_TEMP/home" "$RUNNER_TEMP/venv/bin/claudemon" --version
+      - name: Packaging tests
+        run: uv run pytest -q tests/test_packaging.py
+
   # Differential parity against the pinned baseline (tests/parity/BASELINE); needs full history.
   parity:
     runs-on: ${{ matrix.os }}

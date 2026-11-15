@@ -1,10 +1,36 @@
-# Tool configuration only: no [build-system] and no script entry yet, so uv treats this as a virtual
-# project and installs just the dependency groups. Packaging is the next commit.
+[build-system]
+# setuptools, not flit-core: flit-core (3.12 to 4.2) refuses to build when both claudemon.py and
+# src/claudemon/ exist ("Multiple files or folders could be module claudemon"), and the root
+# claudemon.py stays as the clone route's wrapper. setuptools has no dependencies of its own, which
+# matters because Homebrew builds the backend from source. 77 is the first with SPDX `license`.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "claudeMon"
+description = "A task manager for Claude Code"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 dynamic = ["version"]
 dependencies = []
+
+[project.scripts]
+claudemon = "claudemon.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/todddube/claudeMon"
+
+# The import package is named explicitly, never derived from the project name (claudeMon), so the
+# wheel holds claudemon/ on case-sensitive filesystems too. Only src/ is packaged: the root wrapper
+# and the legacy tap shim are not in the wheel; tap/tap.py ships as an ordinary file the installer copies.
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["claudemon*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "claudemon.__version__"}
 
 [dependency-groups]
 dev = ["pytest", "ruff"]

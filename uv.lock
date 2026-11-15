@@ -9,7 +9,7 @@ resolution-markers = [
 
 [[package]]
 name = "claudemon"
-source = { virtual = "." }
+source = { editable = "." }
 
 [package.dev-dependencies]
 dev = [

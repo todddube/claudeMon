@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Render README screenshots of every page from synthetic demo data.
 
-    utils/shots.py                    # every shot into ./screenshots
-    utils/shots.py token-burn tasks   # only these
+    tools/shots.py                    # every shot into ./screenshots
+    tools/shots.py token-burn tasks   # only these
 
 No display is needed. For each shot it regenerates the demo data (fresh
 timestamps), runs claudeMon headless to capture its screen buffer, draws that
@@ -123,11 +123,11 @@ body{width:%dpx;height:%dpx;overflow:hidden}
 def shot(chrome, name, page, theme, tap, style, size, final_width, ascii_mode, pid):
     env = dict(os.environ, CLAUDE_CONFIG_DIR=str(DEMO), CLAUDEMON_DEMO="1", CLAUDEMON_ASCII="1" if ascii_mode else "0")
     py = sys.executable
-    subprocess.run([py, str(ROOT / "utils/make_demo.py"), str(DEMO), "--pid", str(pid)] + ([] if tap else ["--no-tap"]),
+    subprocess.run([py, str(ROOT / "tools/make_demo.py"), str(DEMO), "--pid", str(pid)] + ([] if tap else ["--no-tap"]),
                    check=True, capture_output=True)
     if tap:
         subprocess.run([py, str(ROOT / "claudemon.py"), "install"], env=env, check=True, capture_output=True)
-    run = subprocess.run([py, str(ROOT / "utils/grid.py"), size, theme, page, style], env=env, capture_output=True, text=True)
+    run = subprocess.run([py, str(ROOT / "tools/grid.py"), size, theme, page, style], env=env, capture_output=True, text=True)
     if run.returncode:
         sys.exit("grid failed for %s:\n%s" % (name, run.stderr[-1500:]))
     doc, w, h = build_html(json.loads(run.stdout), "claudeMon  —  %s" % size.replace("x", "×"))

@@ -1,6 +1,5 @@
-# Tool configuration only, while the tree is flat: no [build-system] and no script entry yet, so uv
-# treats this as a virtual project and installs just the dependency groups. Packaging arrives with
-# the move to src/claudemon/.
+# Tool configuration only: no [build-system] and no script entry yet, so uv treats this as a virtual
+# project and installs just the dependency groups. Packaging is the next commit.
 [project]
 name = "claudeMon"
 requires-python = ">=3.9"
@@ -17,6 +16,7 @@ default-groups = ["dev"]
 [tool.ruff]
 target-version = "py39"
 extend-exclude = ["images"]
+src = ["src"]
 
 [tool.ruff.lint]
 # The default rules: E4, E7, E9, F. No E501 (draw.py's glyph tables are long), no import sorting, no
@@ -25,10 +25,14 @@ extend-exclude = ["images"]
 select = ["E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.per-file-ignores]
-# The tap runs on the system Python and imports nothing, so it keeps the oldest syntax on purpose.
+# The tap runs on the system Python and imports nothing, so it keeps the oldest syntax on purpose;
+# so does the root shim that execs it for installs from before the copy.
+"src/claudemon/tap/tap.py" = ["UP"]
 "tap.py" = ["UP"]
+# The root wrapper puts src/ on sys.path before importing the package.
+"claudemon.py" = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--import-mode=importlib"
-pythonpath = ["."]
+pythonpath = ["src"]

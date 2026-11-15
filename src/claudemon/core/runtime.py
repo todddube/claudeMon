@@ -9,6 +9,7 @@ from claudemon.core.paths import stable_python
 
 SYSTEM_PYTHON = "/usr/bin/python3"
 PROBE_TIMEOUT_S = 5
+WRAPPER = None          # the root claudemon.py's realpath, set by that file when it is run
 _CLT_PYTHONS = ("/Library/Developer/CommandLineTools/usr/bin/python3",
                 "/Applications/Xcode.app/Contents/Developer/usr/bin/python3")
 
@@ -75,6 +76,8 @@ def _argv0_path():
 
 def self_command():
     """The argv that starts claudeMon again (for --window)."""
+    if WRAPPER:
+        return [sys.executable, WRAPPER]
     main = sys.modules.get("__main__")
     spec = getattr(main, "__spec__", None)
     if spec is not None and getattr(spec, "name", None):
@@ -85,4 +88,4 @@ def self_command():
         return [sys.executable, os.path.realpath(path)]
     if path:
         return [path]          # an installed entry point: the path as invoked, not its realpath
-    return [sys.executable, os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "claudemon.py"))]
+    return [sys.executable, "-m", "claudemon"]

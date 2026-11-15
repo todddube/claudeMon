@@ -55,11 +55,11 @@ class Naming(unittest.TestCase):
 
     def test_the_real_marker_is_still_lowercase(self):
         import sys
-        sys.path.insert(0, str(ROOT))
+        sys.path.insert(0, str(ROOT / "src"))
         try:
             from claudemon.tap import installer as install
         finally:
-            sys.path.remove(str(ROOT))
+            sys.path.remove(str(ROOT / "src"))
         self.assertEqual(install.MARK, "# claudemon")
 
     def test_the_rule_catches_what_it_should(self):

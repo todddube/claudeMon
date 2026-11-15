@@ -12,14 +12,16 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = [p.name for p in ROOT.glob("*.py")]
+TAP = ROOT / "src" / "claudemon" / "tap" / "tap.py"     # the real tap; ROOT / "tap.py" is the legacy shim
 
 
 def copy_checkout(dest):
+    """A clone's runnable parts: the root wrapper, the legacy tap shim and src/ as a tree."""
     dest = Path(dest)
     dest.mkdir(parents=True)
-    for name in SOURCES:
+    for name in ("claudemon.py", "tap.py"):
         shutil.copy2(ROOT / name, dest / name)
+    shutil.copytree(ROOT / "src", dest / "src", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     return dest
 
 
@@ -257,12 +259,12 @@ class Migration(Home):
         self.cli("install")
         (self.home / "claudemon" / "tap.py").write_text("# old\n")
         self.assertEqual(self.py("from claudemon.tap import installer as install; print(install.repair())"), "tap updated")
-        self.assertEqual((self.home / "claudemon" / "tap.py").read_bytes(), (ROOT / "tap.py").read_bytes())
+        self.assertEqual((self.home / "claudemon" / "tap.py").read_bytes(), TAP.read_bytes())
 
 
 class Tap(Home):
     def tap(self, *args, stdin="{}"):
-        return subprocess.run([sys.executable, str(ROOT / "tap.py"), *args], input=stdin, env=self.env(),
+        return subprocess.run([sys.executable, str(TAP), *args], input=stdin, env=self.env(),
                               capture_output=True, text=True, timeout=20)
 
     def test_output_and_exit_code_pass_through(self):

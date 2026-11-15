@@ -9,7 +9,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+TAP = ROOT / "src" / "claudemon" / "tap" / "tap.py"
+sys.path.insert(0, str(ROOT / "src"))
 
 PAGES = ["mini", "token", "tasks", "context", "prompt cache", "traffic", "models", "session", "weekly",
          "projects", "inspect:web shop", "settings", "manual", "manual:tap", "prompt"]
@@ -24,8 +25,10 @@ class Ascii(unittest.TestCase):
     def test_every_glyph_in_the_sources_has_a_mapping(self):
         from claudemon.ui import draw
         missing = set()
-        for f in list(ROOT.glob("*.py")):
-            for ch in f.read_text():
+        files = sorted((ROOT / "src" / "claudemon").rglob("*.py")) + sorted((ROOT / "tools").rglob("*.py"))
+        self.assertGreaterEqual(len(files), 20, "the glyph audit found too few sources to be meaningful")
+        for f in files:
+            for ch in f.read_text(encoding="utf-8"):
                 if ord(ch) > 127 and not 0x2800 <= ord(ch) <= 0x28FF and ord(ch) not in draw.ASCII_MAP:
                     missing.add(ch)
         self.assertFalse(missing, "no ASCII fallback for: " + "".join(sorted(missing)))
@@ -78,7 +81,7 @@ class Pages(unittest.TestCase):
         cls.home = cls.tmp.name
         live = subprocess.Popen(["sleep", "300"])         # a live pid for the demo sessions
         cls.addClassCleanup(lambda: (live.kill(), live.wait()))
-        r = run("utils/make_demo.py", cls.home, "--pid", str(live.pid))
+        r = run("tools/make_demo.py", cls.home, "--pid", str(live.pid))
         assert r.returncode == 0, r.stderr
 
     @classmethod
@@ -87,7 +90,7 @@ class Pages(unittest.TestCase):
 
     def grid(self, page, size="120x36", ascii_mode=False, style="blocks"):
         env = {"CLAUDE_CONFIG_DIR": self.home, "CLAUDEMON_DEMO": "1", "CLAUDEMON_ASCII": "1" if ascii_mode else "0"}
-        r = run("utils/grid.py", size, "claude", page, style, env=env)
+        r = run("tools/grid.py", size, "claude", page, style, env=env)
         self.assertEqual(r.returncode, 0, "%s: %s" % (page, r.stderr[-400:]))
         return json.loads(r.stdout)
 
@@ -165,7 +168,7 @@ class Tap(unittest.TestCase):
 
     def test_tap_passes_the_status_line_through(self):
         with tempfile.TemporaryDirectory() as home:
-            r = subprocess.run([sys.executable, str(ROOT / "tap.py"), "statusline", "--", "cat"], input='{"session_id":"x"}',
+            r = subprocess.run([sys.executable, str(TAP), "statusline", "--", "cat"], input='{"session_id":"x"}',
                                env=dict(os.environ, CLAUDE_CONFIG_DIR=home), capture_output=True, text=True)
             self.assertEqual(r.stdout, '{"session_id":"x"}')
 

@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 
 from claudemon.sources import limits  # noqa: E402
 from claudemon.sources import procs  # noqa: E402
@@ -441,7 +441,7 @@ class SettingsPage(unittest.TestCase):
     def test_a_malformed_settings_json_is_explained_not_a_page_error(self):
         with tempfile.TemporaryDirectory() as home:
             Path(home, "settings.json").write_text('{"hooks": {"Notification": {}}}')
-            r = subprocess.run([sys.executable, "utils/grid.py", "150x46", "claude", "settings"], cwd=str(ROOT),
+            r = subprocess.run([sys.executable, "tools/grid.py", "150x46", "claude", "settings"], cwd=str(ROOT),
                                capture_output=True, text=True, timeout=60,
                                env=dict(os.environ, CLAUDE_CONFIG_DIR=home, CLAUDEMON_DEMO="1"))
             self.assertEqual(r.returncode, 0, r.stderr[-500:])

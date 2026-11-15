@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run claudeMon headless and print its screen as JSON (used by shots.py).
 
-    CLAUDE_CONFIG_DIR=<home> CLAUDEMON_DEMO=1 utils/grid.py COLSxROWS THEME PAGE [STYLE]
+    CLAUDE_CONFIG_DIR=<home> CLAUDEMON_DEMO=1 tools/grid.py COLSxROWS THEME PAGE [STYLE]
 
 Output: {"cols", "rows", "cells": [[[ch, fg, bg, bold, underline], ...] per row]}
 where fg/bg are xterm-256 indices (-1 = terminal default).
@@ -12,7 +12,7 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 
 def main():

@@ -17,13 +17,14 @@ from claudemon.ui import manual
 from claudemon.ui import tasks as tasks_mod
 from claudemon import __version__
 from claudemon.core.fmt import fclock, fdate, fdur, fpct, ftok
-from claudemon.ui.draw import GLYPHS, STYLE_NOTE, STYLES, Canvas, Screen, blocks, clip, detect_ascii, set_ascii
+from claudemon.ui.draw import STYLE_NOTE, STYLES, Canvas, Screen, clip, detect_ascii, set_ascii
 from claudemon.sources.limits import WINDOWS
-from claudemon.sources.store import DONE, IDLE, NEEDS_YOU, WORKING, Store, short_model, weight
+from claudemon.sources.store import IDLE, NEEDS_YOU, WORKING, Store, short_model, weight
 from claudemon.ui.themes import ORDER as THEME_ORDER
 from claudemon.ui.themes import THEMES
+from claudemon.ui import widgets as W
+from claudemon.ui.widgets import SPANS, STATE_BADGE
 
-SPANS = [(300, "5m"), (900, "15m"), (3600, "1h"), (6 * 3600, "6h"), (86400, "24h")]
 INTERVALS = [1, 2, 5, 10]
 SIDEBAR_W = 26
 MISS_FLOOR = 2000      # a call this big with almost no cache read counts as a miss
@@ -57,12 +58,6 @@ def can_resize():
 
 
 STATE_ROLE_TUI = {WORKING: "ok", NEEDS_YOU: "warn", IDLE: "dim"}
-STATE_BADGE = {
-    WORKING: ("● Working", "ok"),
-    NEEDS_YOU: ("▲ Needs you", "warn"),
-    IDLE: ("○ Idle", "dim"),
-    DONE: ("· Done", "dim"),
-}
 
 
 class App:
@@ -155,60 +150,6 @@ class App:
         self.selected(sessions)
         self.sel = (self.sel + d) % len(sessions)
         self.sel_sid = sessions[self.sel].sid
-
-    def grad_fn(self):
-        return lambda frac: self.scr.grad_color(frac)
-
-    def chart(self, y, x, h, w, values, vmax=None, color=None, line=None, scale_fmt=ftok, grid=True, style=None):
-        """Area chart in the chosen graph style filling an h×w cell rectangle; returns the scale used."""
-        style = style or self.style
-        if h < 1 or w < 2:
-            return 0
-        top = vmax if vmax is not None else (max(values) if values else 0)
-        color_fn = (lambda f: color) if color is not None else self.grad_fn()
-        g = ("." if style == "ascii" else "┈", max(2, h // 3), self.T("border")) if grid and h >= 4 else None
-        if style in ("braille", "line"):
-            cv = Canvas(w, h)
-            if style == "line":
-                cv.trace(values, top or 1, color_fn)
-            else:
-                cv.area(values, top or 1, color_fn, line)
-            cv.render(self.scr, y, x, self.T("accent"), grid=g)
-        else:
-            blocks(self.scr, y, x, h, w, values, top or 1, color_fn, g, GLYPHS[style])
-        if scale_fmt and top:
-            lab = scale_fmt(top)
-            self.scr.put(y, x + w - len(lab), lab, self.T("dim"))
-        return top
-
-    def nbuckets(self, w):
-        return max(2, min(w * (2 if self.style in ("braille", "line") else 1), self.span // 5))
-
-    def per_min(self, values):
-        size = self.span / max(1, len(values))
-        return [v * 60 / size for v in values]
-
-    def kv(self, y, x, label, value, color=None, w=14):
-        self.scr.put(y, x, label, self.T("dim"), maxw=w)
-        self.scr.put(y + 1, x, value, color or self.T("fg"), extra=curses.A_BOLD, maxw=w)
-
-    def toggles(self, y, x, label, options, active, key):
-        x0 = x
-        x += self.scr.put(y, x, label + " ", self.T("dim"))
-        for i, opt in enumerate(options):
-            if i == active:
-                x += self.scr.put(y, x, " %s " % opt, self.T("bg") if self.T("bg") >= 0 else 16, self.T("accent"), curses.A_BOLD)
-            else:
-                x += self.scr.put(y, x, " %s " % opt, self.T("fg"))
-        x += self.scr.put(y, x, " [%s]  " % key, self.T("border"))
-        return x - x0
-
-    def span_toggle(self, y, x):
-        return self.toggles(y, x, "Graph", [s[1] for s in SPANS], self.span_i, "g")
-
-    def badge(self, y, x, state):
-        text, role = STATE_BADGE[state]
-        return self.scr.put(y, x, text, self.T(role), extra=curses.A_BOLD if state == NEEDS_YOU else 0)
 
     # ── main loop ──────────────────────────────────────────────────────────
     def tick(self, force=False):
@@ -494,7 +435,7 @@ class App:
             x += scr.put(0, x, "  indexing %d/%d…" % (done, total), self.T("info"), bg)
         if not self.tap_ok:
             x += 2
-            x += self.chip(0, x, " ⚡ tap off: press I ", "warn")
+            x += W.chip(self, 0, x, " ⚡ tap off: press I ", "warn")
         right = "⟳ %ds  %s  %s " % (self.interval, self.scr.theme_name, datetime.now().strftime("%H:%M:%S"))
         dot = self.T("ok") if time.time() - self.last_tick < self.interval + 2 else self.T("crit")
         scr.put(0, w - len(right) - 3, "●", dot, bg)
@@ -537,7 +478,7 @@ class App:
                 ("o", "overall"), ("a", "all"), ("t", "theme"), ("u", "update"), ("m", "manual"), ("?", "help"), ("q", "quit")]
         x = 1
         if not self.tap_ok:
-            x += self.chip(y, x, " ⚡ I install tap ", "warn") + 2
+            x += W.chip(self, y, x, " ⚡ I install tap ", "warn") + 2
         for k, label in keys:
             if x + len(k) + len(label) + 3 > w - 30:
                 break
@@ -767,11 +708,6 @@ class App:
     def idx(self, title):
         return next(i for i, p in enumerate(self.pages) if p[0] == title)
 
-    def chip(self, y, x, text, role="warn"):
-        """A reverse-video button-like label; returns its width."""
-        dark = self.T("bg") if self.T("bg") >= 0 else 16
-        return self.scr.put(y, x, text, dark, self.T(role), curses.A_BOLD)
-
     def confirm(self, key, msg):
         now = time.time()
         if self._confirm and self._confirm[0] == key and now - self._confirm[1] < 6:
@@ -868,7 +804,7 @@ class App:
                 scr.put(ry, x0 + 1, "▌", self.T("accent"), self.T("hl_bg"))
             scr.put(ry, x0 + 3, clip(t["title"], lw - 4), self.T(role), self.T("hl_bg"), curses.A_BOLD if cur or tap else 0)
         if not self.tap_ok:
-            self.chip(y0 + bh - 3, x0 + 2, " ⚡ I  Install tap ", "warn")
+            W.chip(self, y0 + bh - 3, x0 + 2, " ⚡ I  Install tap ", "warn")
         else:
             scr.put(y0 + bh - 3, x0 + 2, "✓ tap installed", self.T("ok"), self.T("hl_bg"))
         for row in range(y0 + 1, y0 + bh - 1):
@@ -925,29 +861,9 @@ class App:
                     curses.A_BOLD if style == "h" else 0)
         by = y + bh - 3
         cx = x + 3
-        cx += self.chip(by, cx, "  I / ⏎  Install now  ", "ok") + 3
-        cx += self.chip(by, cx, "  L  Later  ", "dim") + 3
+        cx += W.chip(self, by, cx, "  I / ⏎  Install now  ", "ok") + 3
+        cx += W.chip(self, by, cx, "  L  Later  ", "dim") + 3
         scr.put(by + 1, x + 3, "Later is fine: the ⚡ chip in the header stays until you install (I).", self.T("dim"), self.T("hl_bg"))
-
-    def tap_callout(self, y, x, h, w, what):
-        """A large, hard-to-miss panel shown where a page needs the tap."""
-        scr = self.scr
-        scr.box(y, x, h, w, "⚡ %s needs the claudeMon tap" % what, focus=True, title_fg=self.T("warn"))
-        if self.tap_ok:
-            lines = ["The tap is installed. Waiting for the next status-line refresh.",
-                     "Send a message in any Claude Code session and data appears within seconds.",
-                     "", "Limits are only reported on Pro, Max, Team and Enterprise logins."]
-            for i, ln in enumerate(lines):
-                scr.put(y + 2 + i, x + 3, ln, self.T("fg"))
-            return
-        lines = ["Claude Code reports account limits only through its status line.",
-                 "The tap records each status-line refresh and still prints your status line unchanged.",
-                 "Your settings.json is backed up first, and `claudemon uninstall` restores it exactly."]
-        for i, ln in enumerate(lines):
-            scr.put(y + 2 + i, x + 3, ln, self.T("fg"))
-        self.chip(y + 6, x + 3, "  I I  Install the tap  ", "warn")
-        scr.put(y + 6, x + 31, "press I twice to confirm", self.T("dim"))
-        scr.put(y + 8, x + 3, "More in the manual: press m.", self.T("dim"))
 
     # ── page: tasks ────────────────────────────────────────────────────────
     def task_sel_idxs(self):
@@ -1225,18 +1141,18 @@ class App:
         scr = self.scr
         scr.put(y, x + 1, "Token burn", self.T("title"), extra=curses.A_BOLD)
         tx = x + 14
-        tx += self.span_toggle(y, tx)
-        tx_end = tx + self.toggles(y, tx, "Show", ["Sessions", "Overall"], 1 if self.overall else 0, "o")
+        tx += W.span_toggle(self, y, tx)
+        tx_end = tx + W.toggles(self, y, tx, "Show", ["Sessions", "Overall"], 1 if self.overall else 0, "o")
         sessions = self.session_list()
         now = time.time()
         summary_h = 7
         gy, gh = y + 1, h - summary_h - 1
         if self.overall or not sessions:
             scr.box(gy, x, gh, w, "All sessions · tokens / min", "output overlay")
-            n = self.nbuckets(w - 2)
-            tot = self.per_min(self.store.series(self.span, n, lambda c: c.usage.total))
-            out = self.per_min(self.store.series(self.span, n, lambda c: c.usage.output))
-            top = self.chart(gy + 1, x + 1, gh - 2, w - 2, tot)
+            n = W.nbuckets(self, w - 2)
+            tot = W.per_min(self, self.store.series(self.span, n, lambda c: c.usage.total))
+            out = W.per_min(self, self.store.series(self.span, n, lambda c: c.usage.output))
+            top = W.chart(self, gy + 1, x + 1, gh - 2, w - 2, tot)
             if top:
                 cv = Canvas(w - 2, gh - 2)
                 vmax = max(out) or 1
@@ -1256,8 +1172,8 @@ class App:
             sel = self.selected(sessions)
             first_row = max(0, self.sel // cols - visible_rows + 1)
             pw = w // cols
-            n = self.nbuckets(pw - 2)
-            series = {s.sid: self.per_min(self.store.series(self.span, n, lambda c: c.usage.total, [s])) for s in sessions}
+            n = W.nbuckets(self, pw - 2)
+            series = {s.sid: W.per_min(self, self.store.series(self.span, n, lambda c: c.usage.total, [s])) for s in sessions}
             vmax = max([max(v) for v in series.values()] + [1])
             for idx, s in enumerate(sessions):
                 r, c = divmod(idx, cols)
@@ -1270,7 +1186,7 @@ class App:
                 text, role = STATE_BADGE[state]
                 scr.box(py, px, ph, pw - 1, clip(s.name, pw - 20), focus=focus)
                 scr.put(py, px + pw - 3 - len(text), text, self.T(role), extra=curses.A_BOLD if state == NEEDS_YOU else 0)
-                self.chart(py + 1, px + 1, ph - 3, pw - 3, series[s.sid], vmax=vmax, scale_fmt=None)
+                W.chart(self, py + 1, px + 1, ph - 3, pw - 3, series[s.sid], vmax=vmax, scale_fmt=None)
                 used, size = s.context()
                 info = "%s · %s  ctx %s  %s/m" % (short_model(s.model), s.effort or "?", fpct(used / size), ftok(series[s.sid][-1] if series[s.sid] else 0))
                 loops = s.loops()
@@ -1296,7 +1212,7 @@ class App:
                  ("Idle", str(len(groups[IDLE])), self.T("dim")), ("Loops", str(loops), self.T("crit") if loops else None)]
         cw = max(12, (w - 4) // len(cells))
         for i, (lab, val, col) in enumerate(cells):
-            self.kv(sy + 1, x + 2 + i * cw, lab, val, col, cw - 1)
+            W.kv(self, sy + 1, x + 2 + i * cw, lab, val, col, cw - 1)
         ly = sy + 3
         for state in (WORKING, NEEDS_YOU, IDLE):
             text, role = STATE_BADGE[state]
@@ -1308,7 +1224,7 @@ class App:
     def page_context(self, y, x, h, w):
         scr = self.scr
         scr.put(y, x + 1, "Context", self.T("title"), extra=curses.A_BOLD)
-        self.span_toggle(y, x + 11)
+        W.span_toggle(self, y, x + 11)
         sessions = self.session_list()
         sel = self.selected(sessions)
         scr.box(y + 1, x, h - 1, w, "Context window per session", "used / window")
@@ -1354,19 +1270,19 @@ class App:
             scr.put(row, x + 2, "%s · context size per call" % sel.name, self.T("title"))
             calls = sorted((c for c, a in sel.all_calls(time.time() - self.span) if a is None), key=lambda c: c.ts)
             vals = [c.usage.prompt for c in calls]
-            self.chart(row + 1, x + 2, ch - 1, w - 4, vals, vmax=sel.context()[1])
+            W.chart(self, row + 1, x + 2, ch - 1, w - 4, vals, vmax=sel.context()[1])
 
     # ── page 3: prompt cache ───────────────────────────────────────────────
     def page_cache(self, y, x, h, w):
         scr = self.scr
         now = time.time()
         scr.put(y, x + 1, "Prompt cache", self.T("title"), extra=curses.A_BOLD)
-        self.span_toggle(y, x + 16)
+        W.span_toggle(self, y, x + 16)
         sessions = self.session_list()
         table_h = min(len(sessions) + 3, max(5, h // 3))
         chart_h = max(4, (h - table_h - 5) * 2 // 3)
         writes_h = max(4, h - table_h - 5 - chart_h)
-        n = self.nbuckets(w - 2)
+        n = W.nbuckets(self, w - 2)
         reads = self.store.series(self.span, n, lambda c: c.usage.cache_read)
         prompts = self.store.series(self.span, n, lambda c: c.usage.prompt)
         ratio = [r / p if p else 0 for r, p in zip(reads, prompts)]
@@ -1378,10 +1294,10 @@ class App:
             else:
                 ratio[i] = last
         scr.box(y + 1, x, chart_h, w, "Hit ratio", "100%")
-        self.chart(y + 2, x + 1, chart_h - 2, w - 2, ratio, vmax=1.0, scale_fmt=None)
+        W.chart(self, y + 2, x + 1, chart_h - 2, w - 2, ratio, vmax=1.0, scale_fmt=None)
         wy = y + 1 + chart_h
         scr.box(wy, x, writes_h, w, "Cache writes per minute")
-        self.chart(wy + 1, x + 1, writes_h - 2, w - 2, self.per_min(self.store.series(self.span, n, lambda c: c.usage.cache_write)), color=self.T("info"))
+        W.chart(self, wy + 1, x + 1, writes_h - 2, w - 2, W.per_min(self, self.store.series(self.span, n, lambda c: c.usage.cache_write)), color=self.T("info"))
         sy = wy + writes_h
         u5 = self.store.totals(now - 300)
         live = self.store.live_sessions()
@@ -1391,7 +1307,7 @@ class App:
                  ("Reads now", ftok(u5.cache_read / 5) + "/min"), ("Writes now", ftok(u5.cache_write / 5) + "/min"), ("Misses, 5 min", str(misses))]
         cw = (w - 4) // len(cells)
         for i, (lab, val) in enumerate(cells):
-            self.kv(sy, x + 2 + i * cw, lab, val, w=cw - 1)
+            W.kv(self, sy, x + 2 + i * cw, lab, val, w=cw - 1)
         ty = sy + 2
         scr.box(ty, x, h - (ty - y), w, "Sessions")
         bar_w = max(8, w - 82)
@@ -1436,8 +1352,8 @@ class App:
     def page_traffic(self, y, x, h, w):
         scr = self.scr
         scr.put(y, x + 1, "Traffic", self.T("title"), extra=curses.A_BOLD)
-        self.span_toggle(y, x + 11)
-        n = self.nbuckets(w - 2)
+        W.span_toggle(self, y, x + 11)
+        n = W.nbuckets(self, w - 2)
         panes = [
             ("Tokens out / min", lambda c: c.usage.output, self.T("accent")),
             ("Fresh input / min  (uncached + cache writes)", lambda c: c.usage.input + c.usage.cache_write, self.T("info")),
@@ -1446,9 +1362,9 @@ class App:
         ph = (h - 5) // len(panes)
         for i, (title, fn, col) in enumerate(panes):
             py = y + 1 + i * ph
-            vals = self.per_min(self.store.series(self.span, n, fn))
+            vals = W.per_min(self, self.store.series(self.span, n, fn))
             scr.box(py, x, ph, w, title, "now %s/m" % ftok(vals[-1] if vals else 0))
-            self.chart(py + 1, x + 1, ph - 2, w - 2, vals, color=None if i == 0 else col)
+            W.chart(self, py + 1, x + 1, ph - 2, w - 2, vals, color=None if i == 0 else col)
         u = self.store.totals(time.time() - self.span)
         sy = y + 1 + len(panes) * ph
         scr.box(sy, x, h - (sy - y), w, "Totals · last %s" % SPANS[self.span_i][1])
@@ -1456,15 +1372,15 @@ class App:
                  ("Uncached in", ftok(u.input)), ("Cache writes", ftok(u.cache_write)), ("Cache reads", ftok(u.cache_read))]
         cw = (w - 4) // len(cells)
         for i, (lab, val) in enumerate(cells):
-            self.kv(sy + 1, x + 2 + i * cw, lab, val, w=cw - 1)
+            W.kv(self, sy + 1, x + 2 + i * cw, lab, val, w=cw - 1)
 
     # ── page 5: models ─────────────────────────────────────────────────────
     def page_models(self, y, x, h, w):
         scr = self.scr
         now = time.time()
         scr.put(y, x + 1, "Models", self.T("title"), extra=curses.A_BOLD)
-        tx = x + 10 + self.span_toggle(y, x + 10)
-        self.toggles(y, tx, "Show", ["Model", "Model · effort"], 1 if self.by_effort else 0, "e")
+        tx = x + 10 + W.span_toggle(self, y, x + 10)
+        W.toggles(self, y, tx, "Show", ["Model", "Model · effort"], 1 if self.by_effort else 0, "e")
         key = (lambda c: "%s · %s" % (short_model(c.model), c.effort or "?")) if self.by_effort else (lambda c: short_model(c.model))
         out = Counter()
         effort = defaultdict(Counter)
@@ -1484,13 +1400,13 @@ class App:
         total = sum(out.values())
         foot = 6
         pw = w // len(models)
-        n = self.nbuckets(pw - 2)
+        n = W.nbuckets(self, pw - 2)
         for i, m in enumerate(models):
             px = x + i * pw
             col = self.T("series")[i % len(self.T("series"))]
-            vals = self.per_min(self.store.series(self.span, n, lambda c, m=m: c.usage.output if key(c) == m else 0))
+            vals = W.per_min(self, self.store.series(self.span, n, lambda c, m=m: c.usage.output if key(c) == m else 0))
             scr.box(y + 1, px, h - foot - 1, pw - 1, m, fpct(out[m] / total), title_fg=col)
-            self.chart(y + 2, px + 1, h - foot - 5, pw - 3, vals, color=col)
+            W.chart(self, y + 2, px + 1, h - foot - 5, pw - 3, vals, color=col)
             ef = effort[m]
             ef_t = sum(ef.values()) or 1
             scr.put(y + h - foot - 3, px + 2, clip("Effort " + " · ".join("%s %s" % (e, fpct(v / ef_t)) for e, v in ef.most_common()), pw - 5), self.T("fg"))
@@ -1512,8 +1428,8 @@ class App:
             lx += scr.put(sy + 2, lx, "■ ", col)
             lx += scr.put(sy + 2, lx, "%s %s   " % (m, fpct(v / total)), self.T("fg"))
         tt = sum(think.values())
-        self.kv(sy + 3, x + 2, "Thinking share of output", fpct(tt / total) if total else "—", w=30)
-        self.kv(sy + 3, x + 34, "Output tokens", ftok(total), w=20)
+        W.kv(self, sy + 3, x + 2, "Thinking share of output", fpct(tt / total) if total else "—", w=30)
+        W.kv(self, sy + 3, x + 34, "Output tokens", ftok(total), w=20)
 
     # ── pages 6, 7: limits ─────────────────────────────────────────────────
     def page_limit(self, key, y, x, h, w):
@@ -1530,7 +1446,7 @@ class App:
                 for i, ln in enumerate(lines):
                     scr.put(y + 3 + i, x + 3, ln, self.T("fg"), maxw=w - 6)
                 return
-            self.tap_callout(y + 1, x, h - 1, w, "%s limit" % cfg["label"])
+            W.tap_callout(self, y + 1, x, h - 1, w, "%s limit" % cfg["label"])
             return
         now = time.time()
         end = f.resets or (now + cfg["span"])
@@ -1604,13 +1520,13 @@ class App:
         fy = y + h - foot
         scr.box(fy, x, foot, 34, "Now")
         unit, uname = cfg["unit"], cfg["unit_name"]
-        self.kv(fy + 1, x + 2, "Used", "%.0f%%" % f.pct, scr.level_color(f.pct / 100), 10)
+        W.kv(self, fy + 1, x + 2, "Used", "%.0f%%" % f.pct, scr.level_color(f.pct / 100), 10)
         scr.gauge(fy + 3, x + 2, 28, f.pct / 100)
-        self.kv(fy + 4, x + 2, "Rate", ("%.1f %%/%s" % (f.rate * unit, uname)) if f.rate else "—", w=14)
+        W.kv(self, fy + 4, x + 2, "Rate", ("%.1f %%/%s" % (f.rate * unit, uname)) if f.rate else "—", w=14)
         if not weekly:
-            self.kv(fy + 4, x + 17, "Session rate", ("%.0f %%/5h" % (f.rate * 5 * 3600)) if f.rate else "—", w=15)
+            W.kv(self, fy + 4, x + 17, "Session rate", ("%.0f %%/5h" % (f.rate * 5 * 3600)) if f.rate else "—", w=15)
         else:
-            self.kv(fy + 4, x + 17, "Resets", fclock(f.resets, True), w=15)
+            W.kv(self, fy + 4, x + 17, "Resets", fclock(f.resets, True), w=15)
         bx = x + 35
         bw = w - 35
         scr.box(fy, bx, foot, bw, "Limit hit forecast", f.note or "rolling %s window" % fdur(cfg["recent"]))
@@ -1624,8 +1540,8 @@ class App:
             else:
                 val = fclock(e, weekly)
             col = self.T("crit") if lab == "Projected" and val not in ("∞", "after reset") else self.T("fg")
-            self.kv(fy + 1, bx + 2 + i * 16, lab, val, col, 15)
-        self.kv(fy + 1, bx + 50, "Resets in", fdur((f.resets or now) - now), w=14)
+            W.kv(self, fy + 1, bx + 2 + i * 16, lab, val, col, 15)
+        W.kv(self, fy + 1, bx + 50, "Resets in", fdur((f.resets or now) - now), w=14)
         gy = fy + 4
         if f.gaps:
             scr.put(gy, bx + 2, "Unattributed jumps (usage seen while this machine was silent):", self.T("warn"))
@@ -1657,9 +1573,9 @@ class App:
                 days[s.project][d] += wt
             toks += c.usage.total
         total = sum(by_proj.values())
-        self.kv(y + 1, x + 2, "Weekly limit used", "%d%%" % round(f7.pct) if f7 and f7.pct is not None else "—", w=20)
-        self.kv(y + 1, x + 24, "Tokens", ftok(toks), w=14)
-        self.kv(y + 1, x + 40, "Projects", str(len(by_proj)), w=10)
+        W.kv(self, y + 1, x + 2, "Weekly limit used", "%d%%" % round(f7.pct) if f7 and f7.pct is not None else "—", w=20)
+        W.kv(self, y + 1, x + 24, "Tokens", ftok(toks), w=14)
+        W.kv(self, y + 1, x + 40, "Projects", str(len(by_proj)), w=10)
         scr.box(y + 4, x, h - 4 - 5, w, "Share of usage", "cost-weighted tokens")
         if not total:
             scr.put(y + 6, x + 3, "No usage recorded in this period.", self.T("dim"))
@@ -1736,7 +1652,7 @@ class App:
             ry = y + 2 + i
             scr.put(ry, x + 2, k, self.T("dim"))
             if k == "State":
-                self.badge(ry, x + 12, s.state(now))
+                W.badge(self, ry, x + 12, s.state(now))
                 st = s.t.stuck_tool(now)
                 if st:
                     scr.put(ry, x + 26, clip("%s waiting %s" % (st[0], fdur(st[1])), lw - 28), self.T("warn") if st[1] > 30 else self.T("dim"))
@@ -1749,8 +1665,8 @@ class App:
         rx, rw = x + lw, w - lw
         ch = 8
         scr.box(y + 1, rx, ch, rw, "Tokens / min · main + subagents", SPANS[self.span_i][1])
-        n = self.nbuckets(rw - 2)
-        self.chart(y + 2, rx + 1, ch - 2, rw - 2, self.per_min(self.store.series(self.span, n, lambda c: c.usage.total, [s])))
+        n = W.nbuckets(self, rw - 2)
+        W.chart(self, y + 2, rx + 1, ch - 2, rw - 2, W.per_min(self, self.store.series(self.span, n, lambda c: c.usage.total, [s])))
         # tools
         ty = y + 1 + ch
         scr.box(ty, rx, info_h - ch, rw, "Top tools")
@@ -1843,7 +1759,7 @@ class App:
         if self.tap_ok:
             scr.put(y + 2 + len(lines) + 1, ix + 2, "✓ tap installed · U U to remove", self.T("ok"))
         else:
-            self.chip(y + 2 + len(lines) + 1, ix + 2, " ⚡ I I  Install the tap ", "warn")
+            W.chip(self, y + 2 + len(lines) + 1, ix + 2, " ⚡ I I  Install the tap ", "warn")
         py = y + len(THEME_ORDER) + 5
         if py + 6 < y + h:
             ph = h - (py - y)
@@ -1852,7 +1768,7 @@ class App:
             bw = w // len(STYLES)
             if bw < 14:                                    # too narrow for five: just the active style
                 scr.box(py, x, ph, w, "Graph style: " + self.style, "b")
-                self.chart(py + 1, x + 1, ph - 4, w - 2, vals, scale_fmt=None)
+                W.chart(self, py + 1, x + 1, ph - 4, w - 2, vals, scale_fmt=None)
                 scr.gauge(y + h - 2, x + 2, w - 4, 0.72)
             else:
                 for i, name in enumerate(STYLES):
@@ -1862,7 +1778,7 @@ class App:
                     scr.box(py, bx, ph, cw, name, "● b" if on else "", focus=on)
                     keep = scr.style
                     scr.style = name
-                    self.chart(py + 1, bx + 1, ph - 5, cw - 2, vals, scale_fmt=None, style=name)
+                    W.chart(self, py + 1, bx + 1, ph - 5, cw - 2, vals, scale_fmt=None, style=name)
                     scr.gauge(py + ph - 3, bx + 2, cw - 4, 0.72)
                     scr.style = keep
                     scr.put(py + ph - 2, bx + 2, clip(STYLE_NOTE[name], cw - 4), self.T("dim"))

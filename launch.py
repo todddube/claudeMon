@@ -6,18 +6,15 @@ import shlex
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 
-from paths import stable_python
-
-ROOT = Path(__file__).resolve().parent
+from runtime import self_command
 
 
 def _command(extra, env=None):
     args = " ".join(shlex.quote(a) for a in extra)
     prefix = ("env " + "".join("%s=%s " % (k, shlex.quote(v)) for k, v in env.items())) if env else ""
-    return "printf '\\033]0;claudeMon\\007'; cd %s && exec %s%s %s %s" % (
-        shlex.quote(str(ROOT)), prefix, shlex.quote(stable_python()), shlex.quote(str(ROOT / "claudemon.py")), args)
+    return "printf '\\033]0;claudeMon\\007'; exec %s%s %s" % (
+        prefix, " ".join(shlex.quote(a) for a in self_command()), args)
 
 
 def _osa(script):

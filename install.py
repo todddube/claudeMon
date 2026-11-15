@@ -16,7 +16,8 @@ import stat
 import time
 from pathlib import Path
 
-from paths import SETTINGS_FILE, STATE_DIR, TAP_BACKUP, stable_python
+from paths import SETTINGS_FILE, STATE_DIR, TAP_BACKUP
+from runtime import tap_choice, tap_python
 
 TAP_SRC = Path(__file__).resolve().parent / "tap.py"   # the copy in this checkout
 TAP = STATE_DIR / "tap.py"                              # the copy settings.json runs
@@ -148,7 +149,7 @@ def _save(settings, raw):
 
 # ── recognising and building our commands ────────────────────────────────────
 def _python():
-    return stable_python()
+    return tap_python()
 
 
 def _ours(tap_path, known=()):
@@ -387,7 +388,12 @@ def install():
         return err
     if st["statusline"] and st["hook"]:
         return "tap already installed; re-pointed at " + str(TAP)
-    return "tap installed: limits and 'needs you' are live from the next status-line refresh"
+    msg = "tap installed: limits and 'needs you' are live from the next status-line refresh"
+    if not (st["statusline"] or st["hook"]):
+        warn = tap_choice()[1]
+        if warn:
+            msg += "\nwarning: " + warn
+    return msg
 
 
 def _backup_statusline():

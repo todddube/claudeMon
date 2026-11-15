@@ -18,14 +18,14 @@ LIMITS_LOG = STATE_DIR / "limits.jsonl"    # rate-limit observations over time
 TAP_BACKUP = STATE_DIR / "statusline.backup.json"
 
 
-def stable_python():
+def stable_python(exe=None):
     """The interpreter to bake into settings.json and new windows.
 
     sys.executable can be a versioned path that disappears on upgrade (Xcode's
     python, a Homebrew Cellar directory), which would silently blank the status
     line; prefer the stable name when there is one.
     """
-    exe = sys.executable or "python3"
+    exe = exe or sys.executable or "python3"
     if "/Xcode.app/" in exe or "/CommandLineTools/" in exe:
         return "/usr/bin/python3"
     if "/Cellar/" in exe:

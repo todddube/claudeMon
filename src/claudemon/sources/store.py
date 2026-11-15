@@ -375,16 +375,19 @@ class Store:
         return None
 
     def live_sessions(self):
+        """Sessions with a running Claude Code process, sorted Needs you, Working, Idle, Done, then newest."""
         with self.lock:
             out = [s for s in self.sessions.values() if s.live]
         order = {NEEDS_YOU: 0, WORKING: 1, IDLE: 2, DONE: 3}
         return sorted(out, key=lambda s: (order[s.state()], -(s.t.last_ts or 0)))
 
     def recent_sessions(self, since):
+        """Sessions that are live or had a call since `since` (epoch seconds)."""
         with self.lock:
             return [s for s in self.sessions.values() if s.live or (s.t.last_ts or 0) >= since]
 
     def calls(self, since, sessions=None):
+        """Yield (session, Call, agent or None) for every call since `since`; sessions defaults to the recent ones."""
         for s in sessions if sessions is not None else self.recent_sessions(since):
             for c, a in s.all_calls(since):
                 yield s, c, a
@@ -401,6 +404,7 @@ class Store:
         compact_limits()
 
     def tokens_between(self, t0, t1):
+        """Total tokens of every call whose time is in [t0, t1]."""
         total = 0
         with self.lock:
             sessions = list(self.sessions.values())
@@ -423,12 +427,14 @@ class Store:
         return out
 
     def totals(self, since, sessions=None):
+        """A transcript.Usage summed over the calls since `since`."""
         u = Usage()
         for _, c, _ in self.calls(since, sessions):
             u.add(c.usage)
         return u
 
-    # The rest of what the UI reads, so pages never reach into the store's attributes.
+    # The page-facing API: pages, mini, modals and commands read data only through the public methods
+    # of this section (tests/test_boundaries.py enforces it), never through the store's attributes.
     def forecast(self, key):
         """The limits.Forecast for one window (a WINDOWS key), checked against local usage."""
         return self.limits.forecast(key, self.tokens_between)

@@ -53,10 +53,10 @@ def cmd_snapshot(args):
             s.name[:24], s.state(), short_model(s.model), s.effort or "-", fpct(used / size),
             ftok(t.output), len(s.agents), len(s.loops())))
     for key, label in (("five_hour", "5h"), ("seven_day", "7d")):
-        f = store.limits.forecast(key, store.tokens_between)
+        f = store.forecast(key)
         if f.pct is not None:
             print("%s limit %.0f%%  %s" % (label, f.pct, f.note))
-    if not store.limits.forecast("five_hour", store.tokens_between).pct and not install.installed():
+    if not store.forecast("five_hour").pct and not install.installed():
         print("Limits are empty: run `claudemon install` to add the tap.")
 
 

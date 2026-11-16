@@ -52,6 +52,13 @@ class TapPython(unittest.TestCase):
         self.assertFalse(runtime._probe("/nonexistent/python3"))
         self.assertTrue(runtime._probe(sys.executable))
 
+    def test_probe_rejects_a_python_older_than_tap_py_needs(self):
+        with tempfile.TemporaryDirectory() as d:
+            old = Path(d, "python3")
+            old.write_text('#!/bin/sh\ncase "$2" in *version_info*) exit 1;; esac\nexit 0\n')  # a 3.8: runs, too old
+            old.chmod(0o755)
+            self.assertFalse(runtime._probe(str(old)))
+
     def test_linux_uses_system_python_when_it_runs(self):
         with mock.patch.object(runtime, "_probe", return_value=True):
             self.assertEqual(runtime.tap_choice("linux"), ("/usr/bin/python3", None))

@@ -15,9 +15,9 @@ _CLT_PYTHONS = ("/Library/Developer/CommandLineTools/usr/bin/python3",
 
 
 def _probe(path):
-    """True when `path` starts Python and runs a statement within a few seconds."""
+    """True when `path` starts a Python new enough for tap.py (3.9+) within a few seconds."""
     try:
-        r = subprocess.run([path, "-c", "pass"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        r = subprocess.run([path, "-c", "import sys; sys.exit(sys.version_info < (3, 9))"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, timeout=PROBE_TIMEOUT_S)
     except (OSError, subprocess.SubprocessError):
         return False

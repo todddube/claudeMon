@@ -14,14 +14,29 @@ _CLT_PYTHONS = ("/Library/Developer/CommandLineTools/usr/bin/python3",
                 "/Applications/Xcode.app/Contents/Developer/usr/bin/python3")
 
 
-def _probe(path):
-    """True when `path` starts a Python new enough for tap.py (3.9+) within a few seconds."""
+def _check(path):
+    """None when `path` starts a Python new enough for tap.py (3.9+) within a few seconds,
+    else why not: "missing", "slow", "old" or "broken"."""
     try:
-        r = subprocess.run([path, "-c", "import sys; sys.exit(sys.version_info < (3, 9))"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        r = subprocess.run([path, "-c", "import sys; sys.exit(sys.version_info < (3, 9))"],
+                           stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, timeout=PROBE_TIMEOUT_S)
+    except FileNotFoundError:
+        return "missing"
+    except subprocess.TimeoutExpired:
+        return "slow"
     except (OSError, subprocess.SubprocessError):
-        return False
-    return r.returncode == 0
+        return "broken"
+    return None if r.returncode == 0 else "old" if r.returncode == 1 else "broken"
+
+
+# what to do about the system Python, by why _check() turned it down
+_FIX = {
+    "missing": "install the system Python and run `claudemon install` again",
+    "slow": "%(py)s did not answer within %(s)d s (a first run can be slow); run `claudemon install` again",
+    "old": "%(py)s is older than 3.9; upgrade it and run `claudemon install` again",
+    "broken": "%(py)s did not run; fix it and run `claudemon install` again",
+}
 
 
 def _in_venv():
@@ -46,16 +61,19 @@ def tap_choice(platform=None):
     choice is the system Python (managed by the OS or the package manager), never a venv or a
     versioned brew/uv path. `warning` is None unless only a less stable interpreter was found."""
     platform = platform or sys.platform
+    why = "missing"
     if platform == "darwin":
-        if any(os.path.exists(p) for p in _CLT_PYTHONS) and _probe(SYSTEM_PYTHON):
-            return SYSTEM_PYTHON, None
+        if any(os.path.exists(p) for p in _CLT_PYTHONS):
+            why = _check(SYSTEM_PYTHON)
     elif platform.startswith("linux"):
-        if _probe(SYSTEM_PYTHON):
-            return SYSTEM_PYTHON, None
+        why = _check(SYSTEM_PYTHON)
+    if why is None:
+        return SYSTEM_PYTHON, None
     base = _base_python()
     if base:
-        return base, ("the status-line tap will run on %s, which can move or vanish when it is upgraded; "
-                      "install the system Python and run `claudemon install` again" % base)
+        fix = _FIX[why] % {"py": SYSTEM_PYTHON, "s": PROBE_TIMEOUT_S}
+        return base, ("the status-line tap will run on %s, which can move or vanish when it is upgraded; %s"
+                      % (base, fix))
     exe = sys.executable or "python3"
     return exe, "no base Python found; the status-line tap will run on %s, which may vanish" % exe
 

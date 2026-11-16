@@ -20,12 +20,12 @@ from claudemon.core import runtime  # noqa: E402
 class TapPython(unittest.TestCase):
     def test_mac_with_command_line_tools_uses_system_python(self):
         with mock.patch.object(runtime.os.path, "exists", side_effect=lambda p: p in runtime._CLT_PYTHONS[:1]), \
-                mock.patch.object(runtime, "_probe", return_value=True):
+                mock.patch.object(runtime, "_check", return_value=None):
             self.assertEqual(runtime.tap_choice("darwin"), ("/usr/bin/python3", None))
 
     def test_mac_without_command_line_tools_falls_back_with_warning(self):
         with mock.patch.object(runtime.os.path, "exists", return_value=False), \
-                mock.patch.object(runtime, "_probe", side_effect=AssertionError("must not probe the stub")), \
+                mock.patch.object(runtime, "_check", side_effect=AssertionError("must not probe the stub")), \
                 mock.patch.object(runtime, "_in_venv", return_value=False), \
                 mock.patch.object(runtime, "stable_python", return_value="/opt/x/bin/python3"):
             py, warn = runtime.tap_choice("darwin")
@@ -35,42 +35,49 @@ class TapPython(unittest.TestCase):
     def test_probe_timeout_falls_back(self):
         err = subprocess.TimeoutExpired("python3", 5)
         with mock.patch.object(runtime.subprocess, "run", side_effect=err):
-            self.assertFalse(runtime._probe("/usr/bin/python3"))
+            self.assertEqual(runtime._check("/usr/bin/python3"), "slow")
         with mock.patch.object(runtime.os.path, "exists", return_value=True), \
-                mock.patch.object(runtime, "_probe", return_value=False), \
+                mock.patch.object(runtime.subprocess, "run", side_effect=err), \
                 mock.patch.object(runtime, "_in_venv", return_value=False), \
                 mock.patch.object(runtime, "stable_python", return_value="/base/python3"):
             py, warn = runtime.tap_choice("darwin")
         self.assertEqual(py, "/base/python3")
-        self.assertTrue(warn)
+        self.assertIn("did not answer within 5 s", warn)
+        self.assertNotIn("install the system Python", warn)   # it is installed, just slow
 
     def test_probe_nonzero_exit_and_missing_binary(self):
         class R:
             returncode = 1
         with mock.patch.object(runtime.subprocess, "run", return_value=R()):
-            self.assertFalse(runtime._probe("/usr/bin/python3"))
-        self.assertFalse(runtime._probe("/nonexistent/python3"))
-        self.assertTrue(runtime._probe(sys.executable))
+            self.assertEqual(runtime._check("/usr/bin/python3"), "old")
+        self.assertEqual(runtime._check("/nonexistent/python3"), "missing")
+        self.assertIsNone(runtime._check(sys.executable))
 
     def test_probe_rejects_a_python_older_than_tap_py_needs(self):
         with tempfile.TemporaryDirectory() as d:
             old = Path(d, "python3")
             old.write_text('#!/bin/sh\ncase "$2" in *version_info*) exit 1;; esac\nexit 0\n')  # a 3.8: runs, too old
             old.chmod(0o755)
-            self.assertFalse(runtime._probe(str(old)))
+            self.assertEqual(runtime._check(str(old)), "old")
+            with mock.patch.object(runtime, "SYSTEM_PYTHON", str(old)), \
+                    mock.patch.object(runtime, "_in_venv", return_value=False), \
+                    mock.patch.object(runtime, "stable_python", return_value="/base/python3"):
+                py, warn = runtime.tap_choice("linux")
+        self.assertEqual(py, "/base/python3")
+        self.assertIn("older than 3.9; upgrade it", warn)
 
     def test_linux_uses_system_python_when_it_runs(self):
-        with mock.patch.object(runtime, "_probe", return_value=True):
+        with mock.patch.object(runtime, "_check", return_value=None):
             self.assertEqual(runtime.tap_choice("linux"), ("/usr/bin/python3", None))
             self.assertEqual(runtime.tap_python("linux"), "/usr/bin/python3")
 
     def test_linux_without_system_python_falls_back(self):
-        with mock.patch.object(runtime, "_probe", return_value=False), \
+        with mock.patch.object(runtime, "_check", return_value="missing"), \
                 mock.patch.object(runtime, "_in_venv", return_value=False), \
                 mock.patch.object(runtime, "stable_python", return_value="/usr/local/bin/python3"):
             py, warn = runtime.tap_choice("linux")
         self.assertEqual(py, "/usr/local/bin/python3")
-        self.assertTrue(warn)
+        self.assertIn("install the system Python", warn)
 
     def test_never_bakes_a_venv(self):
         with tempfile.TemporaryDirectory() as d:
@@ -78,7 +85,7 @@ class TapPython(unittest.TestCase):
             base.mkdir(parents=True)
             (base / "python3").write_text("")
             venv = Path(d, "venv")
-            with mock.patch.object(runtime, "_probe", return_value=False), \
+            with mock.patch.object(runtime, "_check", return_value="missing"), \
                     mock.patch.object(runtime.sys, "prefix", str(venv)), \
                     mock.patch.object(runtime.sys, "base_prefix", str(base.parent)), \
                     mock.patch.object(runtime.sys, "_base_executable", str(base / "python3"), create=True), \
@@ -89,7 +96,7 @@ class TapPython(unittest.TestCase):
         self.assertTrue(warn)
 
     def test_venv_without_base_interpreter_still_warns(self):
-        with mock.patch.object(runtime, "_probe", return_value=False), \
+        with mock.patch.object(runtime, "_check", return_value="missing"), \
                 mock.patch.object(runtime, "_in_venv", return_value=True), \
                 mock.patch.object(runtime.sys, "_base_executable", "/gone/python", create=True), \
                 mock.patch.object(runtime.sys, "base_prefix", "/gone"):

@@ -394,7 +394,7 @@ def install(brief=False):
     if not (st["statusline"] or st["hook"]):
         py, warn = tap_choice()
         if warn and brief:
-            msg = "tap installed, but on %s, which can vanish: install the system Python" % py
+            msg = "tap installed, but on %s, which can vanish: `claudemon install` says why" % py
         elif warn:
             msg += "\nwarning: " + warn
     return msg

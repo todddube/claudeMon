@@ -106,7 +106,7 @@ class TapPython(unittest.TestCase):
 
 
 class Installer(unittest.TestCase):
-    """The installer bakes tap_python() for fresh installs and when the baked interpreter vanished."""
+    """The installer bakes tap_choice()'s interpreter for fresh installs and when the baked interpreter vanished."""
 
     def run_py(self, home, code):
         env = dict(os.environ, CLAUDE_CONFIG_DIR=home, HOME=home)
@@ -114,8 +114,8 @@ class Installer(unittest.TestCase):
 
     def test_fresh_install_bakes_tap_python_and_keeps_a_working_one(self):
         with tempfile.TemporaryDirectory() as home:
-            code = ("from claudemon.core import runtime; runtime.tap_python = lambda *a: '/baked/one'\n"
-                    "from claudemon.tap import installer as install; install.tap_python = runtime.tap_python\n"
+            code = ("from claudemon.core import runtime; runtime.tap_choice = lambda *a: ('/baked/one', None)\n"
+                    "from claudemon.tap import installer as install; install.tap_choice = runtime.tap_choice\n"
                     "print(install.install())\n")
             r = self.run_py(home, code)
             self.assertEqual(r.returncode, 0, r.stderr)
@@ -125,15 +125,32 @@ class Installer(unittest.TestCase):
     def test_vanished_interpreter_is_replaced_and_a_working_one_kept(self):
         with tempfile.TemporaryDirectory() as home:
             settings = Path(home, "settings.json")
-            first = ("from claudemon.tap import installer as install; install.tap_python = lambda *a: %r\nprint(install.install())\n")
+            first = ("from claudemon.tap import installer as install; install.tap_choice = lambda *a: (%r, None)\nprint(install.install())\n")
             self.assertEqual(self.run_py(home, first % "/gone/python3").returncode, 0)
             self.assertTrue(json.loads(settings.read_text())["statusLine"]["command"].startswith("/gone/python3 "))
-            fix = "from claudemon.tap import installer as install; install.tap_python = lambda *a: %r\nprint(install.repair())\n"
+            fix = "from claudemon.tap import installer as install; install.tap_choice = lambda *a: (%r, None)\nprint(install.repair())\n"
             self.assertEqual(self.run_py(home, fix % sys.executable).returncode, 0)
             cmd = json.loads(settings.read_text())["statusLine"]["command"]
             self.assertTrue(cmd.startswith(sys.executable + " "), cmd)
             self.assertEqual(self.run_py(home, fix % "/other/python3").returncode, 0)
             self.assertTrue(json.loads(settings.read_text())["statusLine"]["command"].startswith(sys.executable + " "))
+
+
+    def test_one_probe_per_install_and_a_fresh_one_next_time(self):
+        """A fresh install probes the system Python once, not once per command it writes; a second
+        install (the TUI is long-lived: the user may have fixed their Python since) probes again."""
+        with tempfile.TemporaryDirectory() as home:
+            code = ("import sys\n"
+                    "from claudemon.core import runtime\n"
+                    "from claudemon.tap import installer as install\n"
+                    "calls = []\n"
+                    "runtime._CLT_PYTHONS = (sys.executable,)\n"
+                    "runtime._check = lambda p: calls.append(p) or None\n"
+                    "install.install(); print(len(calls))\n"
+                    "install.uninstall(); install.install(); print(len(calls))\n")
+            r = self.run_py(home, code)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stdout.split(), ["1", "2"], r.stdout)
 
 
 class SelfCommand(unittest.TestCase):

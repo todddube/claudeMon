@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 from claudemon.core.paths import SETTINGS_FILE, STATE_DIR, TAP_BACKUP
-from claudemon.core.runtime import tap_choice, tap_python
+from claudemon.core.runtime import tap_choice
 
 TAP_SRC = Path(__file__).resolve().parent / "tap.py"   # the copy in this checkout
 TAP = STATE_DIR / "tap.py"                              # the copy settings.json runs
@@ -148,8 +148,21 @@ def _save(settings, raw):
 
 
 # ── recognising and building our commands ────────────────────────────────────
-def _python():
-    return tap_python()
+class _Choice:
+    """tap_choice() for one install or repair: probed at most once, and only when a command needs
+    a new interpreter. Never kept past the operation: the TUI is long-lived, and the user may
+    install a system Python and press install again."""
+
+    def __init__(self):
+        self._got = None
+
+    def __call__(self):
+        if self._got is None:
+            self._got = tap_choice()
+        return self._got
+
+    def python(self):
+        return self()[0]
 
 
 def _ours(tap_path, known=()):
@@ -209,15 +222,15 @@ def unwrap(cmd, known=()):
     return cmd
 
 
-def _statusline_command(orig, python=None):
-    cmd = "%s %s statusline" % (shlex.quote(python or _python()), shlex.quote(str(TAP)))
+def _statusline_command(orig, python):
+    cmd = "%s %s statusline" % (shlex.quote(python), shlex.quote(str(TAP)))
     if orig:
         cmd += " -- " + shlex.quote(orig)
     return cmd + " " + MARK
 
 
-def _hook_command(python=None):
-    return "%s %s hook Notification %s" % (shlex.quote(python or _python()), shlex.quote(str(TAP)), MARK)
+def _hook_command(python):
+    return "%s %s hook Notification %s" % (shlex.quote(python), shlex.quote(str(TAP)), MARK)
 
 
 def _is_our_hook(h):
@@ -230,6 +243,11 @@ def _is_our_hook(h):
 
 def _gone(python):
     return os.path.isabs(python) and not os.path.exists(python)
+
+
+def _keep(python, choice):
+    """A command's own interpreter while it still exists, else the operation's choice."""
+    return python if python and not _gone(python) else choice.python()
 
 
 def _statusline_cmd(s):
@@ -288,18 +306,17 @@ def install_tap_copy():
     return True
 
 
-def _normalise(s, add):
+def _normalise(s, add, choice):
     """Point every claudeMon command at the installed copy, unwrapping nested taps.
 
-    With add=True, also wrap the status line and add the hook if they are missing.
-    Returns True when `s` changed."""
+    With add=True, also wrap the status line and add the hook if they are missing. A command
+    that needs a new interpreter gets `choice` (a _Choice). Returns True when `s` changed."""
     changed = False
     known = _known_taps(s)
     cmd = _statusline_cmd(s)
     p = parse(cmd, known)
     if p and p["verb"] == "statusline":
-        py = p["python"] if not _gone(p["python"]) else None
-        new = _statusline_command(unwrap(cmd, known), py)
+        new = _statusline_command(unwrap(cmd, known), _keep(p["python"], choice))
         if new != cmd:
             s["statusLine"]["command"] = new
             changed = True
@@ -307,7 +324,7 @@ def _normalise(s, add):
         old = s.get("statusLine")
         _state_dir()
         _write_private(TAP_BACKUP, json.dumps({"statusLine": old}, indent=2, ensure_ascii=False).encode("utf-8"))
-        new = dict(old or {}, type="command", command=_statusline_command(cmd))
+        new = dict(old or {}, type="command", command=_statusline_command(cmd, choice.python()))
         s["statusLine"] = new
         changed = True
 
@@ -315,14 +332,13 @@ def _normalise(s, add):
     for h in _our_hooks(s):
         found = True
         hp = parse(h["command"], known)
-        py = hp["python"] if hp and not _gone(hp["python"]) else None
-        new = _hook_command(py)
+        new = _hook_command(_keep(hp and hp["python"], choice))
         if new != h["command"]:
             h["command"] = new
             changed = True
     if add and not found:
         hooks = s.setdefault("hooks", {})
-        hooks.setdefault("Notification", []).append({"hooks": [{"type": "command", "command": _hook_command()}]})
+        hooks.setdefault("Notification", []).append({"hooks": [{"type": "command", "command": _hook_command(choice.python())}]})
         changed = True
     return changed
 
@@ -362,7 +378,7 @@ def repair():
         if not (st["statusline"] or st["hook"]):
             return ""
         copied = install_tap_copy()
-        if not _normalise(s, add=False):
+        if not _normalise(s, add=False, choice=_Choice()):
             return "tap updated" if copied else ""
         err = _write(s, raw)
         return err or "tap re-pointed at " + str(TAP)
@@ -377,10 +393,11 @@ def install(brief=False):
     if err:
         return err
     s, raw = loaded
+    choice = _Choice()
     try:
         install_tap_copy()
         st = status(s)
-        changed = _normalise(s, add=True)
+        changed = _normalise(s, add=True, choice=choice)
     except OSError as e:
         return "cannot write %s: %s" % (STATE_DIR, e.strerror or e)
     if not changed:
@@ -392,7 +409,7 @@ def install(brief=False):
         return "tap already installed; re-pointed at " + str(TAP)
     msg = "tap installed: limits and 'needs you' are live from the next status-line refresh"
     if not (st["statusline"] or st["hook"]):
-        py, warn = tap_choice()
+        py, warn = choice()
         if warn and brief:
             msg = "tap installed, but on %s, which can vanish: `claudemon install` says why" % py
         elif warn:

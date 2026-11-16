@@ -94,7 +94,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      # setup-uv, not setup-python: actions/setup-python has no 3.9 for ubuntu-latest (26.04).
+      # With python-version it activates a venv on that Python, so `python` below is it.
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python }}
       - name: Parity harness

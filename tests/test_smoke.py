@@ -193,3 +193,14 @@ class Cli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRootWrapperRunsDirectly(unittest.TestCase):
+    """README: `./claudemon.py` and a symlink onto PATH. Both need the executable bit."""
+
+    def test_wrapper_is_executable(self):
+        self.assertTrue(os.access(ROOT / "claudemon.py", os.X_OK), "chmod +x claudemon.py")
+
+    def test_wrapper_runs_without_python_prefix(self):
+        r = subprocess.run([str(ROOT / "claudemon.py"), "--help"], capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)

@@ -411,7 +411,9 @@ def install(brief=False):
     if not (st["statusline"] or st["hook"]):
         py, warn = choice()
         if warn and brief:
-            msg = "tap installed, but on %s, which can vanish: `claudemon install` says why" % py
+            # the footer has one line: give the reason and the fix, not the whole warning
+            _, sep, why = warn.partition("upgraded; ")
+            msg = "tap installed, but on %s, which can vanish: %s" % (py, why if sep else warn)
         elif warn:
             msg += "\nwarning: " + warn
     return msg

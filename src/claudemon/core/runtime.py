@@ -18,7 +18,7 @@ def _check(path):
     """None when `path` starts a Python new enough for tap.py (3.9+) within a few seconds,
     else why not: "missing", "slow", "old" or "broken"."""
     try:
-        r = subprocess.run([path, "-c", "import sys; sys.exit(sys.version_info < (3, 9))"],
+        r = subprocess.run([path, "-c", "import sys; sys.exit(3 if sys.version_info < (3, 9) else 0)"],
                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, timeout=PROBE_TIMEOUT_S)
     except FileNotFoundError:
@@ -27,15 +27,18 @@ def _check(path):
         return "slow"
     except (OSError, subprocess.SubprocessError):
         return "broken"
-    return None if r.returncode == 0 else "old" if r.returncode == 1 else "broken"
+    # 3, not 1: a Python that dies at startup (a bad PYTHONHOME, say) exits 1, and is not "old"
+    return None if r.returncode == 0 else "old" if r.returncode == 3 else "broken"
 
 
 # what to do about the system Python, by why _check() turned it down
+# (install keeps a baked interpreter that still exists, so moving off it takes an uninstall first)
+_AGAIN = "`claudemon uninstall` then `claudemon install`"
 _FIX = {
-    "missing": "install the system Python and run `claudemon install` again",
-    "slow": "%(py)s did not answer within %(s)d s (a first run can be slow); run `claudemon install` again",
-    "old": "%(py)s is older than 3.9; upgrade it and run `claudemon install` again",
-    "broken": "%(py)s did not run; fix it and run `claudemon install` again",
+    "missing": "install the system Python, then run " + _AGAIN,
+    "slow": "%(py)s did not answer within %(s)d s (a first run can be slow); run " + _AGAIN,
+    "old": "%(py)s is older than 3.9; upgrade it, then run " + _AGAIN,
+    "broken": "%(py)s did not run; fix it, then run " + _AGAIN,
 }
 
 

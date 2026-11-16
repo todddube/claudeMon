@@ -49,14 +49,14 @@ class TapPython(unittest.TestCase):
         class R:
             returncode = 1
         with mock.patch.object(runtime.subprocess, "run", return_value=R()):
-            self.assertEqual(runtime._check("/usr/bin/python3"), "old")
+            self.assertEqual(runtime._check("/usr/bin/python3"), "broken")   # died at startup: not "old"
         self.assertEqual(runtime._check("/nonexistent/python3"), "missing")
         self.assertIsNone(runtime._check(sys.executable))
 
     def test_probe_rejects_a_python_older_than_tap_py_needs(self):
         with tempfile.TemporaryDirectory() as d:
             old = Path(d, "python3")
-            old.write_text('#!/bin/sh\ncase "$2" in *version_info*) exit 1;; esac\nexit 0\n')  # a 3.8: runs, too old
+            old.write_text('#!/bin/sh\ncase "$2" in *version_info*) exit 3;; esac\nexit 0\n')  # a 3.8: runs, too old
             old.chmod(0o755)
             self.assertEqual(runtime._check(str(old)), "old")
             with mock.patch.object(runtime, "SYSTEM_PYTHON", str(old)), \
@@ -65,6 +65,10 @@ class TapPython(unittest.TestCase):
                 py, warn = runtime.tap_choice("linux")
         self.assertEqual(py, "/base/python3")
         self.assertIn("older than 3.9; upgrade it", warn)
+
+    def test_probe_calls_a_python_that_dies_at_startup_broken_not_old(self):
+        with mock.patch.dict(os.environ, {"PYTHONHOME": "/nonexistent"}):
+            self.assertEqual(runtime._check(sys.executable), "broken")
 
     def test_linux_uses_system_python_when_it_runs(self):
         with mock.patch.object(runtime, "_check", return_value=None):
@@ -151,6 +155,28 @@ class Installer(unittest.TestCase):
             r = self.run_py(home, code)
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(r.stdout.split(), ["1", "2"], r.stdout)
+
+
+    def test_the_fallback_advice_works_and_the_tui_line_gives_the_reason(self):
+        """The TUI line says why the system Python was passed over, and doing what the warning
+        says (once the system Python answers) moves the tap onto it."""
+        with tempfile.TemporaryDirectory() as home:
+            code = ("import sys\n"
+                    "from claudemon.core import runtime\n"
+                    "from claudemon.tap import installer as install\n"
+                    "runtime._CLT_PYTHONS = (sys.executable,)\n"
+                    "runtime._base_python = lambda: '/base/python3'\n"
+                    "runtime._check = lambda p: 'slow'\n"
+                    "print(install.install(brief=True))\n"
+                    "runtime._check = lambda p: None\n"
+                    "install.uninstall(); install.install()\n"
+                    "print(install._statusline_cmd(install._read()[0]))\n")
+            r = self.run_py(home, code)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            brief, cmd = r.stdout.splitlines()
+            self.assertIn("on /base/python3, which can vanish: /usr/bin/python3 did not answer", brief)
+            self.assertIn("`claudemon uninstall` then `claudemon install`", brief)
+            self.assertTrue(cmd.startswith("/usr/bin/python3 "), cmd)
 
 
 class SelfCommand(unittest.TestCase):

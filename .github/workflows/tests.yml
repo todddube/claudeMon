@@ -99,6 +99,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python }}
+          enable-cache: false    # installs nothing, so the post-job cache save would fail on an empty path
       - name: Parity harness
         run: python tests/parity/harness.py --python "$(command -v python)"
 

@@ -1,0 +1,64 @@
+[build-system]
+# setuptools, not flit-core: flit-core (3.12 to 4.2) refuses to build when both claudemon.py and
+# src/claudemon/ exist ("Multiple files or folders could be module claudemon"), and the root
+# claudemon.py stays as the clone route's wrapper. setuptools has no dependencies of its own, which
+# matters because Homebrew builds the backend from source. 77 is the first with SPDX `license`.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claudeMon"
+description = "A task manager for Claude Code"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+dynamic = ["version"]
+dependencies = []
+
+[project.scripts]
+claudemon = "claudemon.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/todddube/claudeMon"
+
+# The import package is named explicitly, never derived from the project name (claudeMon), so the
+# wheel holds claudemon/ on case-sensitive filesystems too. Only src/ is packaged: the root wrapper
+# and the legacy tap shim are not in the wheel; tap/tap.py ships as an ordinary file the installer copies.
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["claudemon*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "claudemon.__version__"}
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+shots = ["pillow>=9.1"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+target-version = "py39"
+extend-exclude = ["images"]
+src = ["src"]
+
+[tool.ruff.lint]
+# The default rules: E4, E7, E9, F. No E501 (draw.py's glyph tables are long), no import sorting, no
+# `ruff format` and no pyupgrade (the code uses %-formatting throughout): lint only, so there is no
+# reformatting diff. If UP is ever enabled, tap.py stays exempt, below.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# The tap runs on the system Python and imports nothing, so it keeps the oldest syntax on purpose;
+# so does the root shim that execs it for installs from before the copy.
+"src/claudemon/tap/tap.py" = ["UP"]
+"tap.py" = ["UP"]
+# The root wrapper puts src/ on sys.path before importing the package.
+"claudemon.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"
+pythonpath = ["src"]

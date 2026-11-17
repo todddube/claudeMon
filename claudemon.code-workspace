@@ -6,11 +6,15 @@
   ],
   "settings": {
     "workbench.colorCustomizations": {
-      "titleBar.activeBackground": "#262a33",
-      "titleBar.activeForeground": "#ffaf87",
-      "titleBar.inactiveBackground": "#1f222a",
-      "titleBar.inactiveForeground": "#808080",
+      // Title bar in claudeMon orange, so the window stands out in Mission Control
+      // and the window switcher. When the window loses focus it dims a little but keeps the colour.
+      "titleBar.activeBackground": "#ff875f",
+      "titleBar.activeForeground": "#1f222a",
+      "titleBar.inactiveBackground": "#c96a4b",
+      "titleBar.inactiveForeground": "#1f222acc",
       "titleBar.border": "#ff875f",
+      "window.activeBorder": "#ff875f",
+      "window.inactiveBorder": "#c96a4b",
 
       "activityBar.background": "#262a33",
       "activityBar.foreground": "#ff875f",
@@ -52,6 +56,8 @@
       "terminal.ansiCyan": "#5fafaf",
       "terminal.ansiBrightRed": "#ff875f"
     },
-    "window.title": "claudeMon${separator}${activeEditorShort}"
+    // The custom title bar is what lets VS Code colour the top of the window.
+    "window.titleBarStyle": "custom",
+    "window.title":"claudeMon${separator}${activeEditorShort}"
   }
 }

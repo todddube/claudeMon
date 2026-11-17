@@ -12,14 +12,16 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = [p.name for p in ROOT.glob("*.py")]
+TAP = ROOT / "src" / "claudemon" / "tap" / "tap.py"     # the real tap; ROOT / "tap.py" is the legacy shim
 
 
 def copy_checkout(dest):
+    """A clone's runnable parts: the root wrapper, the legacy tap shim and src/ as a tree."""
     dest = Path(dest)
     dest.mkdir(parents=True)
-    for name in SOURCES:
+    for name in ("claudemon.py", "tap.py"):
         shutil.copy2(ROOT / name, dest / name)
+    shutil.copytree(ROOT / "src", dest / "src", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     return dest
 
 
@@ -104,7 +106,7 @@ class Install(Home):
     def test_a_users_own_tap_py_is_not_taken_for_ours(self):
         mine = {"statusLine": {"type": "command", "command": "python3 ~/bin/tap.py statusline"}}
         self.write(mine)
-        self.assertEqual(self.py("import install; print(install.repair())"), "")
+        self.assertEqual(self.py("from claudemon.tap import installer as install; print(install.repair())"), "")
         self.assertEqual(self.read(), mine)
         self.assertIn("installed", self.cli("install"))
         self.assertIn("'python3 ~/bin/tap.py statusline'", self.command())
@@ -166,8 +168,9 @@ class Install(Home):
             self.assertIn("unexpected shape", self.cli("install"), bad)
             self.assertIn("unexpected shape", self.cli("uninstall"), bad)
             self.assertEqual(self.settings.read_text(), bad)
-            self.assertEqual(self.py("import install; print(install.installed(), repr(install.repair()))"), "False ''")
+            self.assertEqual(self.py("from claudemon.tap import installer as install; print(install.installed(), repr(install.repair()))"), "False ''")
 
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root writes through a 0o500 folder (Linux CI containers)")
     def test_unwritable_settings_gives_a_message(self):
         self.write({})
         os.chmod(self.home, 0o500)
@@ -190,7 +193,7 @@ class Install(Home):
     def test_conflicting_write_is_refused(self):
         self.write({"a": 1})
         out = self.py(
-            "import install, json\n"
+            "import json\nfrom claudemon.tap import installer as install\n"
             "s, raw = install._read()\n"
             "open(install.SETTINGS_FILE, 'w').write(json.dumps({'a': 2}))\n"
             "try:\n    install._save({'a': 3}, raw)\nexcept install.Conflict:\n    print('conflict')\n")
@@ -213,10 +216,10 @@ class Migration(Home):
 
     def test_repair_moves_an_old_install_to_the_copy(self):
         self.legacy(ROOT / "tap.py")
-        self.assertIn("re-pointed", self.py("import install; print(install.repair())"))
+        self.assertIn("re-pointed", self.py("from claudemon.tap import installer as install; print(install.repair())"))
         self.assertIn(str(self.home / "claudemon" / "tap.py"), self.command())
         self.assertTrue(self.command().endswith("# claudemon"))
-        self.assertEqual(self.py("import install; print(repr(install.repair()))"), "''")
+        self.assertEqual(self.py("from claudemon.tap import installer as install; print(repr(install.repair()))"), "''")
         self.assertEqual(self.render(), ("legacy\n", 0))
         hook = self.read()["hooks"]["Notification"][0]["hooks"][0]["command"]
         self.assertIn(str(self.home / "claudemon" / "tap.py"), hook)
@@ -226,7 +229,7 @@ class Migration(Home):
         tap = self.tmp / "My Repo" / "claudemon" / "tap.py"
         inner = "%s %s statusline -- %s" % (sys.executable, shlex.quote(str(tap)), shlex.quote("echo deep"))
         self.legacy(tap, original=inner)
-        self.assertEqual(self.py("import install; print(install.unwrap(install._read()[0]['statusLine']['command']))"),
+        self.assertEqual(self.py("from claudemon.tap import installer as install; print(install.unwrap(install._read()[0]['statusLine']['command']))"),
                          "echo deep")
         self.cli("install")
         self.assertEqual(self.command().count("statusline"), 1)
@@ -249,19 +252,19 @@ class Migration(Home):
         p = self.settings
         p.write_text(p.read_text().replace(json.dumps(self.command().split()[0])[1:-1], "/gone/python3"))
         self.assertIn("/gone/", p.read_text())
-        self.assertIn("re-pointed", self.py("import install; print(install.repair())"))
+        self.assertIn("re-pointed", self.py("from claudemon.tap import installer as install; print(install.repair())"))
         self.assertNotIn("/gone/", p.read_text())
 
     def test_repair_refreshes_a_stale_copy(self):
         self.cli("install")
         (self.home / "claudemon" / "tap.py").write_text("# old\n")
-        self.assertEqual(self.py("import install; print(install.repair())"), "tap updated")
-        self.assertEqual((self.home / "claudemon" / "tap.py").read_bytes(), (ROOT / "tap.py").read_bytes())
+        self.assertEqual(self.py("from claudemon.tap import installer as install; print(install.repair())"), "tap updated")
+        self.assertEqual((self.home / "claudemon" / "tap.py").read_bytes(), TAP.read_bytes())
 
 
 class Tap(Home):
     def tap(self, *args, stdin="{}"):
-        return subprocess.run([sys.executable, str(ROOT / "tap.py"), *args], input=stdin, env=self.env(),
+        return subprocess.run([sys.executable, str(TAP), *args], input=stdin, env=self.env(),
                               capture_output=True, text=True, timeout=20)
 
     def test_output_and_exit_code_pass_through(self):
@@ -283,14 +286,14 @@ class Tap(Home):
         for pct in (38, 28, 29, 38, 30, 39, 38, 39):
             self.tap("statusline", stdin=json.dumps({"session_id": "s%d" % pct, "rate_limits": {
                 "seven_day": {"used_percentage": pct, "resets_at": 1795000000}}}))
-        rows = [json.loads(l) for l in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
+        rows = [json.loads(ln) for ln in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
         self.assertEqual([r["seven_day"]["pct"] for r in rows], [38, 39])
 
     def test_without_resets_at_a_drop_is_still_logged(self):
         """Review: with no resets_at every later reading counted as the same window."""
         for pct in (90, 3):
             self.tap("statusline", stdin=json.dumps({"session_id": "a", "rate_limits": {"five_hour": {"used_percentage": pct}}}))
-        rows = [json.loads(l) for l in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
+        rows = [json.loads(ln) for ln in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
         self.assertEqual([r["five_hour"]["pct"] for r in rows], [90, 3])
 
     def test_an_idle_session_on_the_previous_window_is_stale(self):
@@ -299,7 +302,7 @@ class Tap(Home):
             for pct, resets in ((95, 1795000000), (4, 1795018000)):
                 self.tap("statusline", stdin=json.dumps({"session_id": "s%d" % pct, "rate_limits": {
                     "five_hour": {"used_percentage": pct, "resets_at": resets}}}))
-        rows = [json.loads(l) for l in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
+        rows = [json.loads(ln) for ln in (self.home / "claudemon" / "limits.jsonl").read_text().splitlines()]
         self.assertEqual([r["five_hour"]["pct"] for r in rows], [95, 4])
 
     def test_a_new_window_is_logged_even_when_lower(self):

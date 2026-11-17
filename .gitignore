@@ -3,4 +3,12 @@ __pycache__/
 .DS_Store
 
 # third-party reference screenshots (not ours to redistribute)
-images/
+/images/
+
+# tooling
+.venv/
+dist/
+build/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/

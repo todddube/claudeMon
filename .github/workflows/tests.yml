@@ -5,6 +5,7 @@ on:
   pull_request:
 
 jobs:
+  # The required checks "test (3.9)" and "test (3.13)": keep this job's name and matrix.
   test:
     runs-on: macos-latest
     strategy:
@@ -13,10 +14,146 @@ jobs:
         python: ["3.9", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Compile
+        run: uv run python -m compileall -q .
+      - name: Tests
+        run: uv run pytest -q
+
+  # The same suite on Linux (ubuntu-latest has GNU ps, a /usr/bin/python3 and no Command Line Tools).
+  test-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile
+        run: uv run python -m compileall -q .
+      - name: Tests
+        run: uv run pytest -q
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: ruff check
+        run: uv run ruff check
+
+  # The clone route: stock Python 3.9, nothing installed, standard-library unittest.
+  clone-route:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
       - name: Compile
         run: python -m compileall -q .
       - name: Tests
         run: python -m unittest -v
+
+  # The wheel: build it, install it into a clean venv, run the entry point; test_packaging's wheel half.
+  wheel:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - name: Build
+        run: uv build --wheel -o dist
+      - name: Install and run
+        run: |
+          uv venv "$RUNNER_TEMP/venv"
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" --no-deps dist/*.whl
+          cd "$RUNNER_TEMP" && CLAUDE_CONFIG_DIR="$RUNNER_TEMP/home" "$RUNNER_TEMP/venv/bin/claudemon" --version
+      - name: Packaging tests
+        run: uv run pytest -q tests/test_packaging.py
+
+  # Differential parity against the pinned baseline (tests/parity/BASELINE); needs full history.
+  parity:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # setup-uv, not setup-python: actions/setup-python has no 3.9 for ubuntu-latest (26.04).
+      # With python-version it activates a venv on that Python, so `python` below is it.
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: false    # installs nothing, so the post-job cache save would fail on an empty path
+      - name: Parity harness
+        run: python tests/parity/harness.py --python "$(command -v python)"
+
+  # The formula installed from the PR's own commit, then brew style and audit on the pristine file.
+  # tools/brew-check.sh holds the steps (a ci-head branch in a clone, a local tap, a trusted real tap).
+  brew:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install the formula from this checkout, style and audit it
+        run: tools/brew-check.sh
+
+  # After a merge only, not a PR check: install from GitHub main exactly as a user would.
+  brew-main:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      HOMEBREW_NO_ENV_HINTS: "1"
+    steps:
+      - name: Install from main
+        run: |
+          brew tap todddube/claudemon https://github.com/todddube/claudeMon
+          brew install --HEAD todddube/claudemon/claudemon
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/claude" claudemon --version
+      - name: Open an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "brew install --HEAD fails on main (${GITHUB_SHA::7})" \
+            --body "The post-merge brew-main job failed: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+  # The tap runs on the system Python it gets baked with (/usr/bin/python3) and on the newest Python.
+  tap-system-python:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tap tests on /usr/bin/python3
+        run: /usr/bin/python3 -m unittest tests.test_smoke.Tap tests.test_install -v
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Tap tests on the newest Python
+        run: python -m unittest tests.test_smoke.Tap tests.test_install -v

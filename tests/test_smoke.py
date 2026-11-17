@@ -9,10 +9,15 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+TAP = ROOT / "src" / "claudemon" / "tap" / "tap.py"
+sys.path.insert(0, str(ROOT / "src"))
 
-PAGES = ["mini", "token", "tasks", "context", "prompt cache", "traffic", "models", "session", "weekly",
-         "projects", "inspect:web shop", "settings", "manual", "manual:tap", "prompt"]
+from claudemon.ui.pages import PAGES as REGISTRY  # noqa: E402
+
+# Every registered page, as the go() string grid.py takes (a title prefix, plus a session for Inspect),
+# then the screens that are not pages.
+PAGES = (["mini"] + [p.title.lower() + (":web shop" if p.id == "inspect" else "") for p in REGISTRY]
+         + ["manual", "manual:tap", "prompt"])
 
 
 def run(*args, env=None, **kw):
@@ -22,21 +27,23 @@ def run(*args, env=None, **kw):
 
 class Ascii(unittest.TestCase):
     def test_every_glyph_in_the_sources_has_a_mapping(self):
-        import draw
+        from claudemon.ui import draw
         missing = set()
-        for f in list(ROOT.glob("*.py")):
-            for ch in f.read_text():
+        files = sorted((ROOT / "src" / "claudemon").rglob("*.py")) + sorted((ROOT / "tools").rglob("*.py"))
+        self.assertGreaterEqual(len(files), 20, "the glyph audit found too few sources to be meaningful")
+        for f in files:
+            for ch in f.read_text(encoding="utf-8"):
                 if ord(ch) > 127 and not 0x2800 <= ord(ch) <= 0x28FF and ord(ch) not in draw.ASCII_MAP:
                     missing.add(ch)
         self.assertFalse(missing, "no ASCII fallback for: " + "".join(sorted(missing)))
 
     def test_to_ascii(self):
-        import draw
+        from claudemon.ui import draw
         self.assertEqual(draw.to_ascii("╭─┤x├╮ ▁█ ●▲○"), "+-+x++ .# *^o")
         self.assertTrue(draw.to_ascii("⣿⠁⠀").isascii())
 
     def test_detect(self):
-        import draw
+        from claudemon.ui import draw
         keep = {k: os.environ.pop(k, None) for k in ("CLAUDEMON_ASCII", "LC_ALL", "LC_CTYPE", "LANG", "TERM")}
         try:
             os.environ["LANG"] = "en_US.UTF-8"
@@ -53,7 +60,7 @@ class Ascii(unittest.TestCase):
 
 class Styles(unittest.TestCase):
     def test_styles_have_glyph_sets_and_notes(self):
-        import draw
+        from claudemon.ui import draw
         self.assertEqual(draw.STYLES, ("blocks", "braille", "dots", "line", "ascii"))
         for st in draw.STYLES:
             self.assertIn(st, draw.STYLE_NOTE)
@@ -63,7 +70,7 @@ class Styles(unittest.TestCase):
                 self.assertEqual(len(full), 1)
 
     def test_trace_draws_a_line_not_a_fill(self):
-        import draw
+        from claudemon.ui import draw
         cv = draw.Canvas(20, 6)
         cv.trace([1, 5, 9, 5, 1, 5, 9, 5, 1, 5], 10)
         lit = sum(bin(b).count("1") for row in cv.bits for b in row)
@@ -78,7 +85,7 @@ class Pages(unittest.TestCase):
         cls.home = cls.tmp.name
         live = subprocess.Popen(["sleep", "300"])         # a live pid for the demo sessions
         cls.addClassCleanup(lambda: (live.kill(), live.wait()))
-        r = run("utils/make_demo.py", cls.home, "--pid", str(live.pid))
+        r = run("tools/make_demo.py", cls.home, "--pid", str(live.pid))
         assert r.returncode == 0, r.stderr
 
     @classmethod
@@ -87,7 +94,7 @@ class Pages(unittest.TestCase):
 
     def grid(self, page, size="120x36", ascii_mode=False, style="blocks"):
         env = {"CLAUDE_CONFIG_DIR": self.home, "CLAUDEMON_DEMO": "1", "CLAUDEMON_ASCII": "1" if ascii_mode else "0"}
-        r = run("utils/grid.py", size, "claude", page, style, env=env)
+        r = run("tools/grid.py", size, "claude", page, style, env=env)
         self.assertEqual(r.returncode, 0, "%s: %s" % (page, r.stderr[-400:]))
         return json.loads(r.stdout)
 
@@ -97,6 +104,7 @@ class Pages(unittest.TestCase):
                 g = self.grid(page, ascii_mode=asc)
                 text = "".join(c[0] for row in g["cells"] for c in row)
                 self.assertTrue(text.strip(), page)
+                self.assertNotIn("page error", text, page)
                 if asc:
                     self.assertTrue(text.isascii(), "non-ASCII left on %s" % page)
 
@@ -159,13 +167,13 @@ class Tap(unittest.TestCase):
             self.cli(home, "install")
             p = Path(home, "settings.json")
             p.write_text(p.read_text().replace(sys.executable, "/gone/python3").replace("/usr/bin/python3", "/gone/python3"))
-            r = run("-c", "import install;print(install.repair())", env={"CLAUDE_CONFIG_DIR": home})
+            r = run("-c", "from claudemon.tap import installer as install;print(install.repair())", env={"CLAUDE_CONFIG_DIR": home})
             self.assertIn("re-pointed", r.stdout)
             self.assertNotIn("/gone/", p.read_text())
 
     def test_tap_passes_the_status_line_through(self):
         with tempfile.TemporaryDirectory() as home:
-            r = subprocess.run([sys.executable, str(ROOT / "tap.py"), "statusline", "--", "cat"], input='{"session_id":"x"}',
+            r = subprocess.run([sys.executable, str(TAP), "statusline", "--", "cat"], input='{"session_id":"x"}',
                                env=dict(os.environ, CLAUDE_CONFIG_DIR=home), capture_output=True, text=True)
             self.assertEqual(r.stdout, '{"session_id":"x"}')
 
@@ -185,3 +193,14 @@ class Cli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRootWrapperRunsDirectly(unittest.TestCase):
+    """README: `./claudemon.py` and a symlink onto PATH. Both need the executable bit."""
+
+    def test_wrapper_is_executable(self):
+        self.assertTrue(os.access(ROOT / "claudemon.py", os.X_OK), "chmod +x claudemon.py")
+
+    def test_wrapper_runs_without_python_prefix(self):
+        r = subprocess.run([str(ROOT / "claudemon.py"), "--help"], capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)

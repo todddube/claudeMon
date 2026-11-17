@@ -5,18 +5,17 @@ import os
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 
-import limits  # noqa: E402
-import procs  # noqa: E402
-import transcript  # noqa: E402
-from transcript import Transcript  # noqa: E402
+from claudemon.sources import limits  # noqa: E402
+from claudemon.sources import procs  # noqa: E402
+from claudemon.sources import transcript  # noqa: E402
+from claudemon.sources.transcript import Transcript  # noqa: E402
 
 
 def jl(*recs):
@@ -183,7 +182,7 @@ class Limits(TempFiles):
                         {"ts": now - 60, "seven_day": {"pct": 2}}))
         self.assertFalse(limits.compact(p, min_bytes=1 << 20))
         self.assertTrue(limits.compact(p, min_bytes=1))
-        self.assertEqual([json.loads(l)["seven_day"]["pct"] for l in p.read_text().splitlines()], [2])
+        self.assertEqual([json.loads(ln)["seven_day"]["pct"] for ln in p.read_text().splitlines()], [2])
 
     def test_old_observations_are_dropped_from_memory(self):
         now = time.time()
@@ -221,6 +220,26 @@ class Procs(unittest.TestCase):
         self.assertFalse(procs.is_claude_cli(wrapper))
         self.assertEqual(self.proc("/opt/homebrew/bi", "/opt/homebrew/bin/zsh -l").kind, "shell")
 
+    def test_linux_comm_with_spaces(self):
+        lines = ["  67336   67140       00:00  0.0  2060 Web Content     sh -c printf x; sleep 30",
+                 "    123       1    01:02:03  0.0  2452 tmux: server    tmux new -s work",
+                 "      2       1  4-14:22:19  0.0  2528 init-systemd(Ub /init",
+                 "      1       0  4-14:22:20  0.0  6528 systemd         /usr/lib/systemd/systemd --system",
+                 "    317     294  4-14:22:18  0.0  5784 uv              /home/joe/.local/bin/uv run -q site/app.py"]
+        got = [procs.split_line(line, linux=True)[5:] for line in lines]
+        self.assertEqual(got, [["Web Content", "sh -c printf x; sleep 30"], ["tmux: server", "tmux new -s work"],
+                               ["init-systemd(Ub", "/init"], ["systemd", "/usr/lib/systemd/systemd --system"],
+                               ["uv", "/home/joe/.local/bin/uv run -q site/app.py"]])
+        # a line without the padded column (no args, or an overlong name) splits as before
+        for line in ("   10     2  00:01  0.0  0 kthreadd", "   11 2 00:01 0.0 0 kworker/u16:2-events_unbound [kworker]"):
+            self.assertEqual(procs.split_line(line, linux=True), line.split(None, 6))
+
+    def test_macos_lines_split_as_before(self):
+        for line in ("  807     1 87-16:03:14   0.0   1888 /bin/bash        /bin/bash /Library/Application Support/x.sh",
+                  "13936 82678    01:51:08   0.0  34464 /Applications/Cl /Applications/Claude.app/Contents/MacOS/Claude",
+                  "    1     0 87-16:04:20   0.3  24080 /sbin/launchd    /sbin/launchd"):
+            self.assertEqual(procs.split_line(line), line.split(None, 6))
+
     def test_parse_etime(self):
         self.assertEqual(procs.parse_etime("1-02:03:04"), 86400 + 7384)
         self.assertEqual(procs.parse_etime("05:06"), 306)
@@ -248,9 +267,43 @@ class StoreTests(unittest.TestCase):
             (proj / "s2.jsonl").mkdir()          # a directory where a file is expected
             (home / "claudemon").mkdir()
             (home / "claudemon" / "limits.jsonl").write_text(jl({"ts": "bad"}, {"seven_day": 5}, 7))
-            out = self.run_py(home, "import store\ns = store.Store()\ns.index()\ns.refresh()\n"
+            out = self.run_py(home, "from claudemon.sources import store\ns = store.Store()\ns.index()\ns.refresh()\n"
                                     "print(s.indexed, len(s.sessions), 'ok' in s.sessions['s1'].t.calls)")
             self.assertEqual(out, "True 2 True")
+
+    def test_query_methods_match_the_attributes_they_wrap(self):
+        with tempfile.TemporaryDirectory() as home:
+            home = Path(home)
+            proj = home / "projects" / "p"
+            proj.mkdir(parents=True)
+            (proj / "s1.jsonl").write_text(jl(asst("ok")))
+            (home / "claudemon").mkdir()
+            (home / "claudemon" / "limits.jsonl").write_text(jl({"ts": time.time() - 60, "seven_day": {"pct": 5}}, {"ts": time.time() - 30, "five_hour": {"pct": 9}}))
+            code = ("import os\nfrom claudemon.sources import store\ns = store.Store()\n"
+                    "print(s.index_status())\ns.index()\ns.refresh()\n"
+                    "print(s.index_status(), s.session_count(), s.limit_samples())\n"
+                    "f = s.forecast('seven_day'); g = s.limits.forecast('seven_day', s.tokens_between)\n"
+                    "print(f.pct == g.pct, f.points == g.points)\n"
+                    "print(s.proc(os.getpid()) is s.procs.get(os.getpid()), s.proc('x'), s.cli_procs() == s.procs.clis(),\n"
+                    "      s.desktop_procs() == s.procs.desktop())")
+            out = self.run_py(home, code).splitlines()
+            self.assertEqual(out, ["(False, (0, 0))", "(True, (1, 1)) 1 2", "True True", "True None True True"])
+
+    def test_sources_registry_builds_and_refreshes_in_order(self):
+        with tempfile.TemporaryDirectory() as home:
+            code = ("from claudemon import sources\nfrom claudemon.sources import store\n"
+                    "print([n for n, _, _ in sources.SOURCES][:2])\n"
+                    "log = []\n"
+                    "class Probe:\n"
+                    "    def __init__(self, stage): self.stage = stage\n"
+                    "    def refresh(self):\n"
+                    "        log.append((self.stage, len(s.sessions)))\n"
+                    "        if self.stage == 'first': raise RuntimeError('a failing source is swallowed')\n"
+                    "sources.SOURCES += [('early', lambda: Probe('first'), 'first'), ('late', lambda: Probe('last'), 'last')]\n"
+                    "s = store.Store()\ns.refresh()\n"
+                    "print(type(s.procs).__name__, type(s.limits).__name__, s.early.stage, log)\n")
+            out = self.run_py(home, code).splitlines()
+            self.assertEqual(out, ["['procs', 'limits']", "Processes LimitLog first [('first', 0), ('last', 0)]"])
 
     def test_pid_reuse_is_not_a_live_session(self):
         with tempfile.TemporaryDirectory() as home:
@@ -258,7 +311,7 @@ class StoreTests(unittest.TestCase):
             (home / "sessions").mkdir()
             month_ago = time.strftime("%a %b %d %H:%M:%S %Y", time.gmtime(time.time() - 30 * 86400))
             (home / "sessions" / "a.json").write_text(json.dumps({"sessionId": "a", "pid": os.getpid(), "procStart": month_ago}))
-            code = ("import os, store, procs, time\ns = store.Store()\ns.refresh()\n"
+            code = ("import os, time\nfrom claudemon.sources import store\nfrom claudemon.sources import procs\ns = store.Store()\ns.refresh()\n"
                     "me = s.procs.get(os.getpid())\n"
                     "real = time.strftime('%a %b %d %H:%M:%S %Y', time.gmtime(time.time() - me.elapsed))\n"
                     "print(sorted(x for x in s.sessions if s.sessions[x].live), s.is_live({'pid': os.getpid()}),\n"
@@ -273,7 +326,7 @@ class StoreTests(unittest.TestCase):
             old = "2026-01-01T00:00:00Z"
             p.write_text(jl(asst("m", ts=old, tools=[("t1", "Bash", {"command": "sleep 9999"})])))
             os.utime(p, (time.time() - 1200, time.time() - 1200))
-            code = ("import json, store, time\n"
+            code = ("import json, time\nfrom claudemon.sources import store\n"
                     "a = store.Agent(%r)\na.refresh()\na.t.last_ts = time.time() - 1200\n"
                     "busy = a.finished\na.t.pending_tools.clear()\nidle = a.finished\n"
                     "a.t.pending_tools['t1'] = ('Bash', 0, '')\na.meta = {'stoppedByUser': True}\n"
@@ -283,7 +336,7 @@ class StoreTests(unittest.TestCase):
     def test_readers_survive_concurrent_inserts(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import threading, store, transcript\n"
+                "import threading\nfrom claudemon.sources import store\nfrom claudemon.sources import transcript\n"
                 "s = store.Session('x', '/nonexistent')\n"
                 "stop = False\n"
                 "def writer():\n"
@@ -303,10 +356,10 @@ class StoreTests(unittest.TestCase):
 
 
 class TuiInput(unittest.TestCase):
-    """Drives tui.App with the fake curses window from utils/grid.py."""
+    """Drives tui.App with the fake curses window from headless.py."""
 
     def run_py(self, code, home):
-        r = subprocess.run([sys.executable, "-c", "import sys; sys.argv=['grid']\nimport utils.grid as g\n" + code],
+        r = subprocess.run([sys.executable, "-c", "import sys; sys.argv=['grid']\nfrom claudemon.ui import headless as g\ng.install()\n" + code],
                            cwd=str(ROOT), capture_output=True, text=True, timeout=60,
                            env=dict(os.environ, CLAUDE_CONFIG_DIR=home, CLAUDEMON_DEMO="1", TERM_PROGRAM="none"))
         self.assertEqual(r.returncode, 0, r.stderr[-2000:])
@@ -315,13 +368,13 @@ class TuiInput(unittest.TestCase):
     def test_bad_config_values_and_keys(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import tui, store\n"
+                "from claudemon.ui import app as tui\nfrom claudemon.sources import store\n"
                 "st = store.Store(); st.indexed = True\n"
                 "for cfg in ({'page': 99, 'interval': 7, 'span': -1, 'theme': ['x'], 'graph': 5, 'full_size': 'x'},\n"
                 "            {'page': 'x', 'page_name': 'Tasks'}, {'page': True}):\n"
                 "    app = tui.App(g.FakeWin(40, 120), st, dict(cfg, tap_prompt_seen=True))\n"
                 "    app.tick(force=True); app.draw()\n"
-                "    print(app.pages[app.page][0], app.interval, app.span)\n"
+                "    print(app.pages[app.page].title, app.interval, app.span)\n"
                 "for k in ('²', '٣', '0', '9', '1'):\n"
                 "    app.on_key(k)\n"
                 "    print(repr(k), app.page)\n"
@@ -337,7 +390,7 @@ class TuiInput(unittest.TestCase):
     def test_manual_and_help_leave_mini(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import tui, store\n"
+                "from claudemon.ui import app as tui\nfrom claudemon.sources import store\n"
                 "st = store.Store(); st.indexed = True\n"
                 "for k in ('m', '?'):\n"
                 "    app = tui.App(g.FakeWin(12, 74), st, {'mini': True, 'tap_prompt_seen': True})\n"
@@ -348,7 +401,7 @@ class TuiInput(unittest.TestCase):
     def test_install_prompt_ignores_keys_while_the_window_is_too_small(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import tui, store, install\n"
+                "from claudemon.ui import app as tui\nfrom claudemon.sources import store\nfrom claudemon.tap import installer as install\n"
                 "st = store.Store(); st.indexed = True\n"
                 "app = tui.App(g.FakeWin(12, 60), st, {'tap_prompt_seen': True})\n"
                 "app.tick(force=True); app.modal = 'prompt'; app.draw()\n"
@@ -359,7 +412,7 @@ class TuiInput(unittest.TestCase):
     def test_alt_key_is_not_a_quit_and_esc_is(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import curses, tui, store\n"
+                "import curses\nfrom claudemon.ui import app as tui\nfrom claudemon.sources import store\n"
                 "class W(g.FakeWin):\n"
                 "    keys = []\n"
                 "    def nodelay(self, f): pass\n"
@@ -376,7 +429,7 @@ class TuiInput(unittest.TestCase):
     def test_first_launch_in_mini_does_not_raise_the_install_prompt(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import curses, tui, store\n"
+                "import curses\nfrom claudemon.ui import app as tui\nfrom claudemon.sources import store\n"
                 "class W(g.FakeWin):\n"
                 "    keys = ['\\n', 'q']\n"
                 "    def nodelay(self, f): pass\n"
@@ -388,14 +441,14 @@ class TuiInput(unittest.TestCase):
                 "st = store.Store(); st.indexed = True\n"
                 "app = tui.App(W(12, 74), st, {'mini': True})\n"
                 "app.run()\n"
-                "import os, paths\n"
+                "import os\nfrom claudemon.core import paths\n"
                 "print(app.modal, os.path.exists(paths.SETTINGS_FILE))\n")
             self.assertEqual(self.run_py(code, home), "None False")
 
     def test_keyboard_interrupt_saves_and_exits_cleanly(self):
         with tempfile.TemporaryDirectory() as home:
             code = (
-                "import curses, json, tui, store, config\n"
+                "import curses, json\nfrom claudemon.ui import app as tui\nfrom claudemon.sources import store\nfrom claudemon.core import config\n"
                 "class W(g.FakeWin):\n"
                 "    def nodelay(self, f): pass\n"
                 "    def timeout(self, t): pass\n"
@@ -410,7 +463,7 @@ class TuiInput(unittest.TestCase):
 
 class ModelNames(unittest.TestCase):
     def test_short_model(self):
-        import store
+        from claudemon.sources import store
         for raw, want in (("claude-opus-5-5", "Opus 5.5"), ("claude-opus-4-7[1m]", "Opus 4.7"),
                           ("claude-sonnet-4-5@20250929", "Sonnet 4.5"), ("us.anthropic.claude-haiku-4-5-20251001-v1:0", "Haiku 4.5"),
                           ("claude-3-5-sonnet-20241022", "Sonnet 3.5"), ("claude-opus-4-20250514", "Opus 4"),
@@ -418,11 +471,56 @@ class ModelNames(unittest.TestCase):
             self.assertEqual(store.short_model(raw), want, raw)
 
 
+class PageRegistry(unittest.TestCase):
+    """The page contract: order, titles and keys are what config.json, -p and muscle memory rely on.
+    The built-in pages are frozen; a page added later goes anywhere, with its own key."""
+
+    def test_pages_keep_their_order_titles_keys_and_manual_topics(self):
+        from claudemon.ui import manual
+        from claudemon.ui.pages import PAGES
+        builtin = ["Token burn", "Tasks", "Context", "Prompt cache", "Traffic", "Models", "Session limit",
+                   "Weekly limit", "Projects", "Inspect", "Settings"]
+        self.assertEqual([p.title for p in PAGES if p.title in builtin], builtin)
+        self.assertEqual("".join(p.key for p in PAGES if p.title in builtin), "1234567890s")
+        self.assertEqual(len({p.key for p in PAGES}), len(PAGES))
+        self.assertEqual(len({p.id for p in PAGES}), len(PAGES))
+        topics = [t["id"] for t in manual.TOPICS]
+        for p in PAGES:
+            self.assertTrue(callable(p.render) and callable(p.side), p)
+            self.assertIn(p.manual_topic, topics, p)
+            self.assertEqual(manual.TOPICS[manual.topic_index(p.manual_topic)]["id"], p.manual_topic)
+        self.assertEqual(manual.topic_index("no such topic"), 0)
+
+    def test_page_hooks_route_through_the_app(self):
+        with tempfile.TemporaryDirectory() as home:
+            code = ("import sys; sys.argv=['grid']\nfrom claudemon.ui import headless as g\ng.install()\n"
+                    "from claudemon.ui import app as tui\nfrom claudemon.sources import store\n"
+                    "from claudemon.ui.pages import Page\n"
+                    "seen = []\n"
+                    "def render(ctx, y, x, h, w):\n    ctx.scr.put(y, x, 'dummy page', ctx.T('fg'))\n"
+                    "def side(ctx):\n    return [], 'side %d' % ctx.page_state['dummy']['n'], ''\n"
+                    "def tick(ctx):\n    ctx.page_state['dummy']['n'] += 1\n"
+                    "def on_key(ctx, key, k):\n"
+                    "    if k == 'x':\n        ctx.go_page('inspect', 'sid-1'); return True\n    return False\n"
+                    "tui.PAGES.append(Page('dummy', 'Dummy', 'y', render, side, on_key=on_key, tick=tick,\n"
+                    "                      manual_topic='tools', state=lambda: {'n': 0}))\n"
+                    "st = store.Store(); st.indexed = True\n"
+                    "app = tui.App(g.FakeWin(60, 120), st, {'tap_prompt_seen': True})\n"
+                    "app.tick(force=True); app.tick(force=True); app.on_key('y'); app.draw()\n"
+                    "print(app.pages[app.page].id, app.side_cache['dummy'][1])\n"
+                    "app.on_key('m'); print(app.modal, app.man_i == [t['id'] for t in tui.manual.TOPICS].index('tools'))\n"
+                    "app.on_key('\\x1b'); app.on_key('x'); print(app.pages[app.page].id, app.sel_sid)\n")
+            r = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT), capture_output=True, text=True, timeout=60,
+                               env=dict(os.environ, CLAUDE_CONFIG_DIR=home, CLAUDEMON_DEMO="1", TERM_PROGRAM="none"))
+            self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+            self.assertEqual(r.stdout.split("\n")[:3], ["dummy side 2", "manual True", "inspect sid-1"])
+
+
 class SettingsPage(unittest.TestCase):
     def test_a_malformed_settings_json_is_explained_not_a_page_error(self):
         with tempfile.TemporaryDirectory() as home:
             Path(home, "settings.json").write_text('{"hooks": {"Notification": {}}}')
-            r = subprocess.run([sys.executable, "utils/grid.py", "150x46", "claude", "settings"], cwd=str(ROOT),
+            r = subprocess.run([sys.executable, "tools/grid.py", "150x46", "claude", "settings"], cwd=str(ROOT),
                                capture_output=True, text=True, timeout=60,
                                env=dict(os.environ, CLAUDE_CONFIG_DIR=home, CLAUDEMON_DEMO="1"))
             self.assertEqual(r.returncode, 0, r.stderr[-500:])
@@ -433,10 +531,33 @@ class SettingsPage(unittest.TestCase):
 
 class LaunchSize(unittest.TestCase):
     def test_size_is_validated(self):
-        import launch
+        from claudemon import window as launch
         self.assertEqual(launch.parse_size("150x46"), ("150", "46"))
         for bad in ('1" & (do shell script "x") & "x5', "150", "x46", "150x46 ", ""):
             self.assertIsNone(launch.parse_size(bad), bad)
+
+
+class Headless(unittest.TestCase):
+    def test_importing_headless_leaves_curses_alone_until_install(self):
+        code = ("import curses\nfrom claudemon.ui import headless\n"
+                "assert not hasattr(curses, 'COLORS') or curses.COLORS != 256\n"
+                "headless.install()\n"
+                "assert curses.COLORS == 256 and curses.color_pair(3) == 3 << 24\n"
+                "print('ok')\n")
+        r = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT), capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.stdout.strip(), "ok", r.stderr[-500:])
+
+
+class Fmt(unittest.TestCase):
+    def test_formatters_and_the_command_modules_do_not_import_the_tui(self):
+        from claudemon.core import fmt
+        self.assertEqual(fmt.ftok(1234), "1.23k")
+        self.assertEqual(fmt.fdur(3700), "1h01m")
+        self.assertEqual(fmt.fpct(.5), "50%")
+        self.assertEqual(fmt.fpct(None), "—")
+        r = subprocess.run([sys.executable, "-c", "import sys; from claudemon import commands; from claudemon.core import fmt; from claudemon.sources import store; assert 'claudemon.ui.app' not in sys.modules"],
+                           cwd=str(ROOT), capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr[-500:])
 
 
 if __name__ == "__main__":

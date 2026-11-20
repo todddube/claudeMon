@@ -1,0 +1,8 @@
+{
+  "name": "claudemon",
+  "description": "Open claudeMon, a terminal task manager for Claude Code, in its own window",
+  "author": { "name": "Todd Dube" },
+  "homepage": "https://github.com/todddube/claudeMon",
+  "repository": "https://github.com/todddube/claudeMon",
+  "license": "MIT"
+}

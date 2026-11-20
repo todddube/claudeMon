@@ -182,6 +182,15 @@ installs match on its docstring ("tap for claudeMon") and the `# claudemon` sett
 `status/<sid>.json`, `status/<sid>.hook.json` and `limits.jsonl` for the Store to read. The root `tap.py`
 is a shim for installs that predate the package layout.
 
+## The Claude Code plugin
+
+The repo root is both a Claude Code plugin (`.claude-plugin/plugin.json`) and a marketplace that lists it
+(`.claude-plugin/marketplace.json`, `"source": "./"`). The plugin has one command, `commands/claudemon.md`,
+which runs `python3 "${CLAUDE_PLUGIN_ROOT}/claudemon.py" --window $ARGUMENTS`: the clone route, so the plugin
+needs nothing installed, and `--window` returns as soon as the window is open. It does not install the tap;
+that stays `claudemon install` or `I I` on Settings. `tests/test_packaging.py` checks the manifests and that
+the command still points at the wrapper.
+
 ## The headless route
 
 `ui/headless.py` installs a curses colour stub and provides `FakeWin`, a grid of `(char, attr)` cells, so the

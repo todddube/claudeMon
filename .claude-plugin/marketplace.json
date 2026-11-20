@@ -1,0 +1,11 @@
+{
+  "name": "claudemon",
+  "owner": { "name": "Todd Dube" },
+  "plugins": [
+    {
+      "name": "claudemon",
+      "source": "./",
+      "description": "Open claudeMon, a terminal task manager for Claude Code, in its own window"
+    }
+  ]
+}

@@ -64,6 +64,10 @@ the formula's `setuptools` resource no longer matches, and a Homebrew policy cha
 | Homebrew | `brew upgrade --fetch-HEAD claudemon` |
 | uv | `uv tool upgrade claudeMon` |
 | A clone | `git pull` |
+| The Claude Code plugin | `claude plugin marketplace update claudemon`, then `claude plugin update claudemon@claudemon` (or `git pull`, for a marketplace added from a clone) |
+
+The plugin has no version of its own: Claude Code versions it by the commit, so every merge to `main`
+is a new plugin release. A plugin user restarts Claude Code after updating.
 
 After an upgrade nothing else is needed: the tap in `~/.claude/claudemon/` is repaired by the app on
 its next start. To remove claudeMon, run `claudemon uninstall` first, then `brew uninstall claudemon`.

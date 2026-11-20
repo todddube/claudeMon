@@ -241,5 +241,29 @@ class Formula(unittest.TestCase):
         self.assertIn("brew-check: ok", r.stdout)
 
 
+class Plugin(unittest.TestCase):
+    """The Claude Code plugin: the repo root is the plugin, and a marketplace that lists it."""
+
+    def load(self, name):
+        import json
+        return json.loads((ROOT / ".claude-plugin" / name).read_text())
+
+    def test_manifest(self):
+        manifest = self.load("plugin.json")
+        self.assertEqual(manifest["name"], "claudemon")
+        self.assertEqual(manifest["repository"], "https://github.com/todddube/claudeMon")
+        m = re.search(r'(?m)^license = "([^"]+)"', (ROOT / "pyproject.toml").read_text())
+        self.assertEqual(manifest["license"], m.group(1))
+
+    def test_marketplace_lists_the_root(self):
+        market = self.load("marketplace.json")
+        self.assertEqual([(p["name"], p["source"]) for p in market["plugins"]], [("claudemon", "./")])
+
+    def test_command_opens_the_wrapper_in_a_window(self):
+        text = (ROOT / "commands" / "claudemon.md").read_text()
+        self.assertIn('!`python3 "${CLAUDE_PLUGIN_ROOT}/claudemon.py" --window $ARGUMENTS`', text)
+        self.assertIn("allowed-tools: Bash(python3:*)", text)
+
+
 if __name__ == "__main__":
     unittest.main()

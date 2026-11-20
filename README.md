@@ -50,6 +50,37 @@ No dependencies and no build step: standard library only. The root `claudemon.py
 `ln -s "$PWD/claudemon.py" ~/.local/bin/claudemon`. From a clone you can also run `uv run claudemon` or
 `python3 -m claudemon` (from the clone's folder).
 
+### Claude Code plugin
+
+This repo is also a Claude Code plugin. It adds a `/claudemon` command that opens claudeMon in its own window.
+Install it once, for every project, from a terminal:
+
+```sh
+claude plugin marketplace add todddube/claudeMon
+claude plugin install claudemon@claudemon --scope user
+```
+
+Or, inside a Claude Code session, run `/plugin marketplace add todddube/claudeMon` and then
+`/plugin install claudemon@claudemon`. Restart Claude Code, then type `/claudemon` in any session:
+
+```text
+/claudemon                # open claudeMon in a new window
+/claudemon --mini         # the mini view
+/claudemon -t dracula -p tasks
+```
+
+It takes the same flags as `claudemon` (see [Run](#run)). The plugin runs claudeMon from its own copy, so
+you don't need Homebrew, uv or a clone. With only the plugin installed you have no `claudemon` command to
+install the tap from, so do it in the app: open `/claudemon`, go to Settings and press `I` twice (see
+[the tap](#-install-the-tap-for-limits-and-alerts)).
+
+| To | Run |
+|---|---|
+| Update | `claude plugin marketplace update claudemon`, then `claude plugin update claudemon@claudemon`, then restart Claude Code |
+| Remove | `claude plugin uninstall claudemon@claudemon`, then `claude plugin marketplace remove claudemon` |
+
+Remove the tap first (Settings, `U` twice) if you installed it and are removing claudeMon entirely.
+
 ## Run
 
 The examples use `claudemon`, the command from Homebrew, uv or the symlink. From a clone, run
@@ -62,6 +93,9 @@ claudemon --mini          # start in the mini view (z switches between mini and 
 claudemon -t dracula      # pick a theme (t cycles, b cycles graph styles)
 claudemon -p tasks        # start on a page (name or number)
 ```
+
+Inside Claude Code, with the [plugin](#claude-code-plugin) installed, `/claudemon` does the same as
+`claudemon --window` and takes the same flags (`/claudemon --mini`).
 
 **Requirements:** Python 3.9 or newer (macOS's `/usr/bin/python3` from the Xcode command line tools works;
 tested on 3.9 and 3.13), a 256-colour terminal and, ideally, a UTF-8 locale (the default in Terminal, iTerm
@@ -245,6 +279,7 @@ claudemon install      # add the tap          claudemon uninstall   # remove it
 | `src/claudemon/ui/` | the interface: the app loop, one module per page in `pages/`, the mini view and modals, drawing primitives, colour themes, the manual text |
 | `pyproject.toml` `uv.lock` | packaging and developer tooling: uv dependency groups, ruff and pytest settings |
 | `Formula/` | the Homebrew formula, `claudemon.rb` |
+| `.claude-plugin/` `commands/` | the Claude Code plugin: its manifest, the marketplace that lists it, and the `/claudemon` command |
 | `docs/` | [SPEC](docs/SPEC.md), [ARCHITECTURE](docs/ARCHITECTURE.md), [RELEASING](docs/RELEASING.md) and the review notes |
 | `tests/` | the test suite, its shared helpers in `tests/support.py`, and the parity harness in `tests/parity/` |
 | `tools/` | demo data generator, the screenshot pipeline and the formula check ([README](tools/README.md)) |

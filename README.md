@@ -52,16 +52,34 @@ No dependencies and no build step: standard library only. The root `claudemon.py
 
 ### Claude Code plugin
 
-This repo is also a Claude Code plugin. It adds a `/claudemon` command that opens claudeMon in its own window:
+This repo is also a Claude Code plugin. It adds a `/claudemon` command that opens claudeMon in its own window.
+Install it once, for every project, from a terminal:
 
 ```sh
 claude plugin marketplace add todddube/claudeMon
 claude plugin install claudemon@claudemon --scope user
 ```
 
-Then type `/claudemon` in any session. It takes the usual flags, for example `/claudemon --mini`.
-The plugin runs claudeMon from its own copy, so you don't need to install anything else. For limits
-and alerts, you still need to install the tap (below).
+Or, inside a Claude Code session, run `/plugin marketplace add todddube/claudeMon` and then
+`/plugin install claudemon@claudemon`. Restart Claude Code, then type `/claudemon` in any session:
+
+```text
+/claudemon                # open claudeMon in a new window
+/claudemon --mini         # the mini view
+/claudemon -t dracula -p tasks
+```
+
+It takes the same flags as `claudemon` (see [Run](#run)). The plugin runs claudeMon from its own copy, so
+you don't need Homebrew, uv or a clone. With only the plugin installed you have no `claudemon` command to
+install the tap from, so do it in the app: open `/claudemon`, go to Settings and press `I` twice (see
+[the tap](#-install-the-tap-for-limits-and-alerts)).
+
+| To | Run |
+|---|---|
+| Update | `claude plugin marketplace update claudemon`, then `claude plugin update claudemon@claudemon`, then restart Claude Code |
+| Remove | `claude plugin uninstall claudemon@claudemon`, then `claude plugin marketplace remove claudemon` |
+
+Remove the tap first (Settings, `U` twice) if you installed it and are removing claudeMon entirely.
 
 ## Run
 
